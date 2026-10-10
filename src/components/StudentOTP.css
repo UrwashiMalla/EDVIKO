@@ -1,0 +1,384 @@
+/* =========================================
+   LERNIQ OTP VERIFICATION
+========================================= */
+
+.otp-page {
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 0.9fr;
+  background:
+    radial-gradient(
+      circle at 20% 40%,
+      rgba(124, 77, 255, 0.10),
+      transparent 35%
+    ),
+    linear-gradient(
+      135deg,
+      #ffffff 0%,
+      #f8f5ff 48%,
+      #eee8ff 100%
+    );
+  overflow: hidden;
+}
+
+
+/* LEFT */
+
+.otp-visual {
+  position: relative;
+  min-height: 100vh;
+  padding: 55px 8% 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.otp-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 24px;
+  color: #17143d;
+}
+
+.otp-logo span {
+  font-size: 25px;
+}
+
+.otp-visual-content {
+  position: relative;
+  z-index: 2;
+  margin-top: 105px;
+  margin-left: 8px;
+}
+
+.otp-badge {
+  display: inline-flex;
+  padding: 8px 13px;
+  border-radius: 30px;
+  background: rgba(112, 69, 233, 0.09);
+  color: #7045e9;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.6px;
+  margin-bottom: 22px;
+}
+
+.otp-visual-content h1 {
+  margin: 0;
+  font-size: clamp(42px, 4vw, 65px);
+  line-height: 1.05;
+  letter-spacing: -2.5px;
+  color: #17143d;
+}
+
+.otp-visual-content h1 span {
+  color: #7045e9;
+}
+
+.otp-visual-content p {
+  margin-top: 24px;
+  color: #858098;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.otp-student-image {
+  position: absolute;
+  width: 480px;
+  max-width: 55%;
+  left: 17%;
+  bottom: -20px;
+  z-index: 1;
+  filter: drop-shadow(
+    0 25px 35px rgba(70, 43, 150, 0.14)
+  );
+}
+
+
+/* RIGHT */
+
+.otp-form-section {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 35px 55px;
+  box-sizing: border-box;
+}
+
+.otp-card {
+  width: min(500px, 100%);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(224, 218, 241, 0.8);
+  border-radius: 28px;
+  padding: 38px;
+  box-sizing: border-box;
+  box-shadow:
+    0 25px 70px rgba(70, 42, 150, 0.12);
+  text-align: center;
+}
+
+
+/* BACK */
+
+.otp-back {
+  display: block;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #7045e9;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+
+/* ICON */
+
+.otp-icon {
+  width: 65px;
+  height: 65px;
+  margin: 32px auto 18px;
+  border-radius: 20px;
+  background: #eee8ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+
+/* HEADING */
+
+.otp-small-title {
+  margin: 0 0 7px;
+  color: #7045e9;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.otp-card h2 {
+  margin: 0;
+  color: #17143d;
+  font-size: 30px;
+  letter-spacing: -0.8px;
+}
+
+.otp-description {
+  margin: 10px 0 5px;
+  color: #918ca1;
+  font-size: 12px;
+}
+
+.otp-email {
+  color: #40396a;
+  font-size: 13px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+
+/* OTP INPUT */
+
+.otp-inputs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 30px 0 15px;
+}
+
+.otp-inputs input {
+  width: 53px;
+  height: 60px;
+  border: 1.5px solid #e1dced;
+  border-radius: 14px;
+  background: #ffffff;
+  text-align: center;
+  font-size: 23px;
+  font-weight: 800;
+  color: #30275a;
+  outline: none;
+  transition: 0.2s;
+  box-sizing: border-box;
+}
+
+.otp-inputs input:focus {
+  border-color: #7045e9;
+  box-shadow:
+    0 0 0 4px rgba(112, 69, 233, 0.08);
+  transform: translateY(-2px);
+}
+
+
+/* ERROR */
+
+.otp-error {
+  margin: 5px 0 12px;
+  color: #dc4d61;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+
+/* RESEND */
+
+.otp-resend {
+  margin: 12px 0 22px;
+}
+
+.otp-resend p {
+  margin: 0;
+  color: #9691a4;
+  font-size: 11px;
+}
+
+.otp-resend span {
+  display: block;
+  margin-top: 5px;
+  color: #7045e9;
+  font-weight: 700;
+}
+
+.otp-resend button {
+  border: none;
+  background: transparent;
+  color: #7045e9;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+
+/* VERIFY BUTTON */
+
+.verify-button {
+  width: 100%;
+  height: 52px;
+  border: none;
+  border-radius: 13px;
+  background: linear-gradient(
+    135deg,
+    #7045e9,
+    #8c51ed
+  );
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 19px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow:
+    0 12px 25px rgba(112, 69, 233, 0.22);
+}
+
+
+/* DEMO */
+
+.demo-otp {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  margin-top: 20px;
+  padding: 12px 14px;
+  border-radius: 13px;
+  background: #f7f4ff;
+  border: 1px solid #ece7fa;
+}
+
+.demo-otp > span {
+  font-size: 18px;
+}
+
+.demo-otp strong {
+  display: block;
+  font-size: 10px;
+  color: #5b527a;
+}
+
+.demo-otp p {
+  margin: 3px 0 0;
+  font-size: 9px;
+  color: #9691a4;
+}
+
+
+/* RESPONSIVE */
+
+@media (max-width: 1050px) {
+
+  .otp-page {
+    grid-template-columns: 0.9fr 1fr;
+  }
+
+  .otp-student-image {
+    width: 390px;
+    left: 10%;
+  }
+
+  .otp-visual-content h1 {
+    font-size: 45px;
+  }
+
+  .otp-form-section {
+    padding: 25px;
+  }
+
+}
+
+
+@media (max-width: 800px) {
+
+  .otp-page {
+    display: block;
+    overflow-y: auto;
+  }
+
+  .otp-visual {
+    min-height: 390px;
+    padding: 30px;
+  }
+
+  .otp-visual-content {
+    margin-top: 55px;
+  }
+
+  .otp-visual-content h1 {
+    font-size: 38px;
+  }
+
+  .otp-student-image {
+    width: 290px;
+    right: 0;
+    left: auto;
+    bottom: -30px;
+  }
+
+  .otp-form-section {
+    min-height: auto;
+    padding: 20px;
+  }
+
+}
+
+
+@media (max-width: 500px) {
+
+  .otp-card {
+    padding: 25px 18px;
+    border-radius: 22px;
+  }
+
+  .otp-inputs {
+    gap: 6px;
+  }
+
+  .otp-inputs input {
+    width: 44px;
+    height: 54px;
+  }
+
+}

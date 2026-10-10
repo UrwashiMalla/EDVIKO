@@ -1,0 +1,2071 @@
+/* =========================================================
+   LERNIQ STUDENT DASHBOARD
+   Premium pastel / glass / 3D design
+========================================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+.student-dashboard {
+  min-height: 100vh;
+  width: 100%;
+  background:
+    radial-gradient(
+      circle at 15% 15%,
+      rgba(190, 165, 255, 0.22),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 90% 25%,
+      rgba(220, 205, 255, 0.28),
+      transparent 30%
+    ),
+    linear-gradient(
+      135deg,
+      #fbfaff 0%,
+      #f7f3ff 45%,
+      #faf9ff 100%
+    );
+
+  color: #17153d;
+  overflow-x: hidden;
+}
+
+
+/* =========================================================
+   NAVBAR
+========================================================= */
+
+.dashboard-navbar {
+  width: calc(100% - 48px);
+  height: 62px;
+
+  margin: 14px 24px 0;
+
+  padding: 0 24px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  background: rgba(255, 255, 255, 0.9);
+
+  border: 1px solid rgba(115, 80, 210, 0.15);
+
+  border-radius: 17px;
+
+  box-shadow:
+    0 8px 30px rgba(82, 54, 145, 0.07);
+
+  backdrop-filter: blur(18px);
+
+  position: relative;
+  z-index: 50;
+}
+
+
+/* BRAND */
+
+.dashboard-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  min-width: 170px;
+}
+
+.brand-cap {
+  font-size: 21px;
+}
+
+.dashboard-brand strong {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+
+/* NAVIGATION */
+
+.dashboard-nav {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.nav-link {
+  border: none;
+  background: transparent;
+
+  padding: 9px 16px;
+
+  border-radius: 10px;
+
+  font-size: 12px;
+  font-weight: 500;
+
+  color: #77738d;
+
+  cursor: pointer;
+
+  transition:
+    background 0.25s ease,
+    color 0.25s ease,
+    transform 0.25s ease;
+}
+
+.nav-link:hover {
+  color: #7045e9;
+  transform: translateY(-1px);
+}
+
+.nav-link.active {
+  color: #7045e9;
+  background: #eee7ff;
+  font-weight: 700;
+}
+
+
+/* RIGHT NAV */
+
+.dashboard-actions {
+  min-width: 220px;
+
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 10px;
+}
+
+.icon-button {
+  width: 35px;
+  height: 35px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  border: 1px solid #e8e1f7;
+
+  background: white;
+
+  color: #625d78;
+
+  font-size: 13px;
+
+  cursor: pointer;
+
+  position: relative;
+}
+
+.notification-button span {
+  position: absolute;
+
+  right: -2px;
+  top: -5px;
+
+  width: 15px;
+  height: 15px;
+
+  border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #7444ed;
+  color: white;
+
+  font-size: 8px;
+  font-weight: 700;
+}
+
+
+/* PROFILE */
+
+.student-profile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  padding-left: 5px;
+
+  cursor: pointer;
+}
+
+.profile-avatar {
+  width: 35px;
+  height: 35px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  background:
+    linear-gradient(
+      135deg,
+      #8b5cf6,
+      #7045e9
+    );
+
+  color: white;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  box-shadow:
+    0 7px 18px rgba(112, 69, 233, 0.22);
+}
+
+.profile-text {
+  display: flex;
+  flex-direction: column;
+
+  line-height: 1.15;
+}
+
+.profile-text strong {
+  font-size: 11px;
+}
+
+.profile-text small {
+  font-size: 9px;
+  color: #9994aa;
+}
+
+.profile-arrow {
+  color: #89849b;
+  font-size: 12px;
+}
+
+
+/* =========================================================
+   HERO
+========================================================= */
+
+.dashboard-hero {
+  width: min(1495px, calc(100% - 120px));
+  height: 410px;
+
+  margin: 24px auto 0;
+
+  border-radius: 23px;
+
+  position: relative;
+
+  overflow: hidden;
+
+  border: 1px solid rgba(112, 69, 233, 0.14);
+
+  background:
+    linear-gradient(
+      105deg,
+      #f0eaff 0%,
+      #faf8ff 43%,
+      #ffffff 100%
+    );
+
+  box-shadow:
+    0 28px 65px rgba(91, 61, 154, 0.10);
+
+  perspective: 1200px;
+}
+
+
+/* LARGE DECORATIVE SHAPES */
+
+.dashboard-hero::before {
+  content: "";
+
+  position: absolute;
+
+  width: 390px;
+  height: 390px;
+
+  left: -80px;
+  top: -160px;
+
+  border-radius: 50%;
+
+  background:
+    rgba(213, 199, 255, 0.34);
+
+  z-index: 0;
+}
+
+.dashboard-hero::after {
+  content: "";
+
+  position: absolute;
+
+  width: 350px;
+  height: 350px;
+
+  left: -75px;
+  bottom: -250px;
+
+  border-radius: 50%;
+
+  border: 1px solid rgba(150, 118, 235, 0.13);
+
+  z-index: 0;
+}
+
+
+/* =========================================================
+   HERO LEFT CONTENT
+========================================================= */
+
+.hero-content {
+  position: absolute;
+
+  left: 50px;
+  top: 63px;
+
+  width: 530px;
+
+  z-index: 10;
+}
+
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+
+  padding: 7px 13px;
+
+  border-radius: 30px;
+
+  background: #eee7ff;
+
+  color: #7045e9;
+
+  font-size: 10px;
+  font-weight: 800;
+
+  letter-spacing: 1px;
+
+  margin-bottom: 16px;
+}
+
+.hero-content h1 {
+  margin: 0;
+
+  font-size: clamp(48px, 4vw, 66px);
+
+  line-height: 0.98;
+
+  letter-spacing: -3px;
+
+  font-weight: 800;
+
+  color: #16143d;
+}
+
+.hero-content h1 span {
+  color: #7045e9;
+}
+
+.hero-description {
+  margin: 18px 0 22px;
+
+  font-size: 13px;
+
+  line-height: 1.65;
+
+  color: #817c98;
+}
+
+
+/* =========================================================
+   SEARCH BAR
+========================================================= */
+
+.learning-search {
+  width: 450px;
+  height: 46px;
+
+  display: flex;
+  align-items: center;
+
+  background: white;
+
+  border: 1px solid #e5def5;
+
+  border-radius: 12px;
+
+  padding: 5px 7px 5px 14px;
+
+  box-shadow:
+    0 9px 24px rgba(82, 51, 150, 0.08);
+
+  transition:
+    box-shadow 0.3s ease,
+    transform 0.3s ease;
+}
+
+.learning-search:focus-within {
+  box-shadow:
+    0 12px 32px rgba(112, 69, 233, 0.14);
+}
+
+.search-sparkle {
+  font-size: 16px;
+  margin-right: 8px;
+}
+
+.learning-search input {
+  flex: 1;
+
+  border: none;
+  outline: none;
+
+  background: transparent;
+
+  font-size: 11px;
+
+  color: #403b58;
+}
+
+.learning-search input::placeholder {
+  color: #aaa5b9;
+}
+
+.learning-search button {
+  width: 35px;
+  height: 35px;
+
+  border: none;
+
+  border-radius: 10px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #7d4cf0,
+      #7045e9
+    );
+
+  color: white;
+
+  font-size: 16px;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 7px 15px rgba(112, 69, 233, 0.25);
+}
+
+
+/* =========================================================
+   HERO STUDENT
+========================================================= */
+
+.hero-student {
+  position: absolute;
+
+  left: 48%;
+  top: 48px;
+
+  width: 440px;
+  height: 330px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  z-index: 8;
+
+  transform: translateX(-50%);
+
+  transform-style: preserve-3d;
+}
+
+
+/* GLOW */
+
+.student-glow {
+  position: absolute;
+
+  width: 310px;
+  height: 310px;
+
+  border-radius: 50%;
+
+  background:
+    radial-gradient(
+      circle,
+      rgba(139, 92, 246, 0.20),
+      rgba(139, 92, 246, 0.08) 48%,
+      transparent 70%
+    );
+
+  filter: blur(7px);
+
+  z-index: 0;
+}
+
+
+/* STUDENT */
+
+.student-3d-wrapper {
+  width: 390px;
+  height: 330px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  position: relative;
+
+  z-index: 4;
+
+  transform-style: preserve-3d;
+
+  will-change: transform;
+}
+
+.dashboard-student-image {
+  width: 390px;
+  max-width: none;
+
+  height: auto;
+
+  object-fit: contain;
+
+  display: block;
+
+  filter:
+    drop-shadow(
+      0 22px 25px rgba(73, 44, 147, 0.16)
+    );
+
+  transform: translateZ(35px);
+
+  user-select: none;
+  pointer-events: none;
+}
+
+
+/* =========================================================
+   FLOATING NOTE
+========================================================= */
+
+.floating-note {
+  position: absolute;
+
+  left: 73px;
+  top: 15px;
+
+  width: 67px;
+  min-height: 76px;
+
+  padding: 10px 8px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+
+  background: rgba(255, 255, 255, 0.92);
+
+  border: 1px solid #e9e2f6;
+
+  border-radius: 9px;
+
+  box-shadow:
+    0 10px 25px rgba(70, 40, 130, 0.10);
+
+  color: #716b85;
+
+  font-size: 8px;
+
+  line-height: 1.45;
+
+  z-index: 10;
+}
+
+
+/* SPARKLES */
+
+.floating-sparkle {
+  position: absolute;
+
+  color: #7045e9;
+
+  font-size: 18px;
+
+  z-index: 12;
+
+  pointer-events: none;
+}
+
+.sparkle-one {
+  left: 50px;
+  top: 65px;
+}
+
+.sparkle-two {
+  right: 55px;
+  bottom: 40px;
+
+  font-size: 14px;
+}
+
+
+/* =========================================================
+   QUOTE CARD
+========================================================= */
+
+.hero-quote {
+  position: absolute;
+
+  right: 35px;
+  top: 82px;
+
+  width: 310px;
+  min-height: 205px;
+
+  padding: 28px 30px 22px;
+
+  background:
+    rgba(255, 255, 255, 0.88);
+
+  border: 1px solid #e7dff6;
+
+  border-radius: 17px;
+
+  box-shadow:
+    0 18px 40px rgba(79, 48, 143, 0.10);
+
+  backdrop-filter: blur(15px);
+
+  z-index: 15;
+
+  transform: rotate(0deg);
+
+  transition:
+    transform 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+.hero-quote:hover {
+  transform:
+    translateY(-5px)
+    rotate(-1deg);
+
+  box-shadow:
+    0 25px 48px rgba(79, 48, 143, 0.15);
+}
+
+.quote-mark {
+  display: block;
+
+  color: #7444ed;
+
+  font-size: 42px;
+
+  font-weight: 900;
+
+  line-height: 0.7;
+
+  margin-bottom: 13px;
+}
+
+.quote-badge {
+  position: absolute;
+
+  right: 16px;
+  top: 16px;
+
+  padding: 6px 11px;
+
+  background: #f0e9ff;
+
+  border-radius: 20px;
+
+  color: #7045e9;
+
+  font-size: 8px;
+
+  font-weight: 800;
+}
+
+.hero-quote p {
+  margin: 0;
+
+  font-size: 20px;
+
+  line-height: 1.25;
+
+  letter-spacing: -0.5px;
+
+  font-weight: 700;
+
+  color: #252044;
+}
+
+.quote-bottom {
+  margin-top: 17px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quote-bottom small {
+  color: #9690a6;
+
+  font-size: 9px;
+}
+
+.quote-bottom button {
+  width: 30px;
+  height: 30px;
+
+  border: none;
+
+  border-radius: 50%;
+
+  background: #eee6ff;
+
+  color: #7045e9;
+
+  cursor: pointer;
+
+  font-size: 14px;
+}
+
+
+/* =========================================================
+   HERO DECORATIVE CIRCLE
+========================================================= */
+
+.hero-circle {
+  position: absolute;
+
+  border-radius: 50%;
+
+  pointer-events: none;
+}
+
+.circle-one {
+  width: 65px;
+  height: 65px;
+
+  right: 45px;
+  top: 25px;
+
+  border: 1px solid rgba(120, 84, 225, 0.12);
+}
+
+.circle-two {
+  width: 35px;
+  height: 35px;
+
+  right: 250px;
+  bottom: 25px;
+
+  border: 1px solid rgba(120, 84, 225, 0.10);
+}
+
+.circle-three {
+  width: 18px;
+  height: 18px;
+
+  left: 47%;
+  top: 120px;
+
+  background: #7045e9;
+
+  opacity: 0.8;
+}
+
+
+/* =========================================================
+   FEATURES SECTION
+========================================================= */
+
+.features-section {
+  width: min(1495px, calc(100% - 120px));
+
+  margin: 58px auto 80px;
+}
+
+
+/* SECTION HEADING */
+
+.section-heading {
+  display: flex;
+
+  align-items: flex-end;
+
+  justify-content: space-between;
+
+  margin-bottom: 24px;
+}
+
+.section-heading h2 {
+  margin: 0;
+
+  font-size: 27px;
+
+  letter-spacing: -1px;
+
+  color: #16143d;
+}
+
+.section-heading p {
+  margin: 6px 0 0;
+
+  font-size: 11px;
+
+  color: #9690a6;
+}
+
+.see-all-button {
+  border: none;
+
+  background: transparent;
+
+  color: #7045e9;
+
+  font-size: 10px;
+
+  font-weight: 700;
+
+  cursor: pointer;
+
+  padding: 5px;
+}
+
+
+/* =========================================================
+   FEATURE GRID
+========================================================= */
+
+.feature-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+
+  gap: 20px;
+
+  perspective: 1200px;
+}
+
+
+/* CARD */
+
+.feature-card {
+  min-width: 0;
+
+  background: white;
+
+  border: 1px solid #e8e1f5;
+
+  border-radius: 15px;
+
+  overflow: hidden;
+
+  box-shadow:
+    0 10px 30px rgba(75, 45, 140, 0.07);
+
+  transform-style: preserve-3d;
+
+  transition:
+    box-shadow 0.35s ease,
+    transform 0.35s ease;
+}
+
+.feature-card:hover {
+  box-shadow:
+    0 25px 45px rgba(75, 45, 140, 0.15);
+}
+
+
+/* =========================================================
+   FEATURE PREVIEW
+========================================================= */
+
+.feature-preview {
+  height: 155px;
+
+  padding: 18px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  position: relative;
+
+  transition:
+    transform 0.35s ease;
+}
+
+
+/* INDIVIDUAL PASTELS */
+
+.upload {
+  background: linear-gradient(
+    135deg,
+    #fff0f7,
+    #f8e9ff
+  );
+}
+
+.flashcards {
+  background: linear-gradient(
+    135deg,
+    #fff0e5,
+    #ffe5d8
+  );
+}
+
+.quiz {
+  background: linear-gradient(
+    135deg,
+    #edf6ff,
+    #e6efff
+  );
+}
+
+.test {
+  background: linear-gradient(
+    135deg,
+    #f0e9ff,
+    #e9ddff
+  );
+}
+
+.tutor {
+  background: linear-gradient(
+    135deg,
+    #f4e8ff,
+    #f0e2ff
+  );
+}
+
+.audio {
+  background: linear-gradient(
+    135deg,
+    #fff0e8,
+    #ffe4d8
+  );
+}
+
+.grading {
+  background: linear-gradient(
+    135deg,
+    #eaf4ff,
+    #e1edff
+  );
+}
+
+.progress {
+  background: linear-gradient(
+    135deg,
+    #e8fff4,
+    #dcf7ea
+  );
+}
+
+
+/* =========================================================
+   PREVIEW WINDOWS
+========================================================= */
+
+.preview-window {
+  width: 92%;
+  height: 105px;
+
+  background: white;
+
+  border-radius: 9px;
+
+  box-shadow:
+    0 10px 22px rgba(74, 45, 140, 0.08);
+
+  padding: 14px;
+
+  color: #36314d;
+
+  position: relative;
+
+  overflow: hidden;
+}
+
+.preview-window strong {
+  display: block;
+
+  font-size: 8px;
+
+  margin-bottom: 9px;
+}
+
+
+/* DOTS */
+
+.window-dots {
+  display: flex;
+
+  gap: 4px;
+
+  margin-bottom: 8px;
+}
+
+.window-dots i {
+  width: 4px;
+  height: 4px;
+
+  border-radius: 50%;
+
+  background: #d8d1e5;
+}
+
+
+/* MINI OPTIONS */
+
+.mini-options {
+  display: flex;
+
+  gap: 5px;
+}
+
+.mini-options span {
+  padding: 5px 7px;
+
+  border: 1px solid #e2dcef;
+
+  border-radius: 5px;
+
+  font-size: 6px;
+
+  color: #77718b;
+}
+
+
+/* =========================================================
+   FLASHCARD PREVIEW
+========================================================= */
+
+.flashcard-preview {
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+}
+
+.flashcard {
+  position: absolute;
+
+  width: 150px;
+  height: 62px;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  background: white;
+
+  border-radius: 7px;
+
+  box-shadow:
+    0 7px 18px rgba(65, 40, 120, 0.08);
+
+  font-size: 8px;
+
+  font-weight: 600;
+}
+
+.flashcard.one {
+  transform: translate(-10px, -8px) rotate(-3deg);
+  opacity: 0.45;
+}
+
+.flashcard.two {
+  transform: translate(5px, 7px);
+
+  z-index: 2;
+}
+
+
+/* =========================================================
+   QUIZ
+========================================================= */
+
+.quiz-preview {
+  padding: 13px;
+}
+
+.quiz-option {
+  width: 100%;
+
+  padding: 6px 8px;
+
+  margin-top: 5px;
+
+  border-radius: 5px;
+
+  background: #f5f3f8;
+
+  font-size: 6px;
+}
+
+.quiz-option.correct {
+  background: #ddf7e8;
+
+  color: #42905e;
+}
+
+
+/* =========================================================
+   WRITTEN TEST
+========================================================= */
+
+.writing-lines {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 7px;
+
+  margin-top: 8px;
+}
+
+.writing-lines i {
+  width: 100%;
+  height: 1px;
+
+  background: #d8d3df;
+}
+
+.test-preview button {
+  margin-top: 9px;
+
+  border: none;
+
+  border-radius: 4px;
+
+  background: #7045e9;
+
+  color: white;
+
+  font-size: 6px;
+
+  padding: 5px 10px;
+}
+
+
+/* =========================================================
+   TUTOR
+========================================================= */
+
+.tutor-preview {
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+}
+
+.tutor-screen {
+  font-size: 18px;
+
+  font-weight: 600;
+
+  color: #7045e9;
+}
+
+.play-button {
+  position: absolute;
+
+  right: 13px;
+  bottom: 10px;
+
+  width: 21px;
+  height: 21px;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  background: #7045e9;
+
+  color: white;
+
+  font-size: 8px;
+}
+
+
+/* =========================================================
+   AUDIO
+========================================================= */
+
+.audio-preview {
+  display: flex;
+
+  align-items: center;
+
+  gap: 12px;
+}
+
+.audio-play {
+  width: 27px;
+  height: 27px;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  background: #7045e9;
+
+  color: white;
+
+  font-size: 8px;
+}
+
+.waveform {
+  display: flex;
+
+  align-items: center;
+
+  gap: 3px;
+
+  height: 55px;
+}
+
+.waveform span {
+  width: 3px;
+
+  border-radius: 5px;
+
+  background: #8d68ed;
+
+  transform-origin: center;
+}
+
+
+/* =========================================================
+   GRADING
+========================================================= */
+
+.grading-preview {
+  display: flex;
+
+  align-items: center;
+
+  gap: 16px;
+}
+
+.grade-circle {
+  width: 55px;
+  height: 55px;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  border: 6px solid #e8f0ff;
+
+  color: #7045e9;
+
+  font-size: 10px;
+
+  font-weight: 800;
+}
+
+.grade-lines {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 7px;
+}
+
+.grade-lines span {
+  font-size: 6px;
+
+  color: #77718b;
+}
+
+
+/* =========================================================
+   PROGRESS
+========================================================= */
+
+.progress-preview {
+  padding-top: 14px;
+}
+
+.chart {
+  height: 62px;
+
+  display: flex;
+
+  align-items: flex-end;
+
+  gap: 7px;
+
+  margin-top: 7px;
+}
+
+.chart span {
+  width: 11px;
+
+  max-height: 48px;
+
+  border-radius: 4px 4px 0 0;
+
+  background:
+    linear-gradient(
+      to top,
+      #63c68f,
+      #82dca9
+    );
+}
+
+
+/* =========================================================
+   CARD INFORMATION
+========================================================= */
+
+.feature-info {
+  min-height: 145px;
+
+  padding: 15px 17px 17px;
+
+  background: white;
+
+  position: relative;
+}
+
+.feature-icon {
+  width: 27px;
+  height: 27px;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 8px;
+
+  background: #f0eaff;
+
+  color: #7045e9;
+
+  font-size: 11px;
+
+  font-weight: 800;
+
+  margin-bottom: 10px;
+}
+
+.feature-info h3 {
+  margin: 0 0 7px;
+
+  font-size: 11px;
+
+  font-weight: 800;
+
+  color: #24203f;
+}
+
+.feature-info p {
+  margin: 0;
+
+  font-size: 8px;
+
+  line-height: 1.55;
+
+  color: #9690a6;
+
+  max-width: 220px;
+}
+
+.try-button {
+  border: none;
+
+  background: transparent;
+
+  padding: 0;
+
+  margin-top: 17px;
+
+  color: #7045e9;
+
+  font-size: 8px;
+
+  font-weight: 800;
+
+  cursor: pointer;
+}
+
+
+/* =========================================================
+   CTA
+========================================================= */
+
+.dashboard-cta {
+  display: block;
+
+  margin: 40px auto 10px;
+
+  border: none;
+
+  padding: 13px 27px;
+
+  border-radius: 11px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #7d4cf0,
+      #7045e9
+    );
+
+  color: white;
+
+  font-size: 11px;
+
+  font-weight: 700;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 12px 25px rgba(112, 69, 233, 0.24);
+}
+
+.dashboard-footer-text {
+  text-align: center;
+
+  color: #a19bac;
+
+  font-size: 9px;
+
+  margin-top: 10px;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 1200px) {
+
+  .dashboard-hero,
+  .features-section {
+    width: calc(100% - 50px);
+  }
+
+  .hero-content {
+    left: 35px;
+  }
+
+  .hero-content h1 {
+    font-size: 52px;
+  }
+
+  .hero-student {
+    left: 51%;
+    transform: translateX(-50%) scale(0.88);
+  }
+
+  .hero-quote {
+    right: 25px;
+    width: 260px;
+  }
+
+  .feature-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+}
+
+
+@media (max-width: 900px) {
+
+  .dashboard-navbar {
+    width: calc(100% - 24px);
+
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+
+  .dashboard-nav {
+    display: none;
+  }
+
+  .dashboard-actions {
+    min-width: auto;
+  }
+
+  .dashboard-hero {
+    height: auto;
+
+    min-height: 760px;
+
+    padding: 40px 25px;
+  }
+
+  .hero-content {
+    position: relative;
+
+    left: auto;
+    top: auto;
+
+    width: 100%;
+
+    text-align: center;
+  }
+
+  .hero-content h1 {
+    font-size: 48px;
+  }
+
+  .learning-search {
+    width: min(450px, 100%);
+
+    margin: 0 auto;
+  }
+
+  .hero-student {
+    position: relative;
+
+    left: auto;
+    top: auto;
+
+    transform: none;
+
+    width: 100%;
+
+    margin-top: 25px;
+  }
+
+  .hero-quote {
+    position: relative;
+
+    right: auto;
+    top: auto;
+
+    width: min(310px, 100%);
+
+    margin: -5px auto 0;
+  }
+
+  .floating-note {
+    left: calc(50% - 170px);
+  }
+
+  .features-section {
+    margin-top: 45px;
+  }
+
+}
+
+
+@media (max-width: 600px) {
+
+  .dashboard-navbar {
+    height: 58px;
+
+    padding: 0 14px;
+  }
+
+  .dashboard-brand {
+    min-width: auto;
+  }
+
+  .profile-text,
+  .profile-arrow {
+    display: none;
+  }
+
+  .dashboard-actions {
+    gap: 6px;
+  }
+
+  .dashboard-hero,
+  .features-section {
+    width: calc(100% - 24px);
+  }
+
+  .dashboard-hero {
+    min-height: 720px;
+
+    margin-top: 15px;
+
+    border-radius: 18px;
+  }
+
+  .hero-content {
+    top: 0;
+  }
+
+  .hero-content h1 {
+    font-size: 38px;
+
+    letter-spacing: -1.8px;
+  }
+
+  .hero-description {
+    font-size: 11px;
+  }
+
+  .student-3d-wrapper {
+    width: 300px;
+    height: 270px;
+  }
+
+  .dashboard-student-image {
+    width: 320px;
+  }
+
+  .hero-quote {
+    min-height: 185px;
+  }
+
+  .hero-quote p {
+    font-size: 18px;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr;
+
+    gap: 15px;
+  }
+
+  .section-heading {
+    align-items: flex-start;
+
+    gap: 15px;
+
+    flex-direction: column;
+  }
+
+  .see-all-button {
+    padding-left: 0;
+  }
+
+}
+/* =========================================================
+   GENERATED DESIGN DETAILS
+========================================================= */
+
+
+/* =========================================================
+   BETTER STUDENTS / BRIGHTER FUTURES
+========================================================= */
+
+.better-students-note {
+  position: absolute;
+
+  left: 40px;
+  top: 8px;
+
+  width: 105px;
+
+  color: #7045e9;
+
+  font-family:
+    "Comic Sans MS",
+    "Segoe Print",
+    cursive;
+
+  font-size: 15px;
+
+  font-weight: 700;
+
+  line-height: 1.05;
+
+  text-align: center;
+
+  transform: rotate(-5deg);
+
+  z-index: 20;
+
+  pointer-events: none;
+}
+
+.better-students-note span {
+  display: block;
+}
+
+.note-underline {
+  margin-top: 2px;
+
+  font-size: 21px;
+
+  transform: rotate(-8deg);
+}
+
+
+/* =========================================================
+   KEEP GOING NOTE
+========================================================= */
+
+.keep-going-note {
+  position: absolute;
+
+  right: 30px;
+  bottom: -4px;
+
+  color: #7045e9;
+
+  font-family:
+    "Comic Sans MS",
+    "Segoe Print",
+    cursive;
+
+  font-size: 12px;
+
+  font-weight: 700;
+
+  line-height: 1.15;
+
+  text-align: center;
+
+  transform: rotate(-4deg);
+
+  z-index: 20;
+
+  pointer-events: none;
+}
+
+.keep-going-arrow {
+  font-size: 28px;
+
+  line-height: 0.6;
+
+  margin-bottom: 2px;
+
+  transform: rotate(-10deg);
+}
+
+
+/* =========================================================
+   DECORATIVE GREEN PLANT
+========================================================= */
+
+.hero-plant {
+  position: absolute;
+
+  right: 8px;
+  bottom: 25px;
+
+  width: 115px;
+  height: 155px;
+
+  z-index: 18;
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+
+  justify-content: flex-end;
+
+  pointer-events: none;
+}
+
+
+/* POT */
+
+.plant-pot {
+  width: 62px;
+  height: 48px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #ffffff,
+      #e7e5ed
+    );
+
+  border-radius:
+    5px 5px 18px 18px;
+
+  position: relative;
+
+  box-shadow:
+    0 12px 20px rgba(52, 42, 80, 0.15);
+}
+
+.plant-pot::before {
+  content: "";
+
+  position: absolute;
+
+  width: 70px;
+  height: 10px;
+
+  left: -4px;
+  top: -4px;
+
+  border-radius: 50%;
+
+  background: #f4f2f7;
+
+  border: 1px solid #dedbe5;
+}
+
+
+/* LEAVES */
+
+.plant-leaves {
+  width: 95px;
+  height: 100px;
+
+  position: relative;
+
+  margin-bottom: -3px;
+}
+
+.leaf {
+  position: absolute;
+
+  width: 25px;
+  height: 65px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #78d47e,
+      #299a55
+    );
+
+  border-radius:
+    100% 0 100% 0;
+
+  transform-origin: bottom center;
+
+  box-shadow:
+    inset -3px -4px 7px rgba(0, 80, 35, 0.12);
+}
+
+
+/* CENTER LEAF */
+
+.leaf-1 {
+  left: 35px;
+  bottom: 5px;
+
+  width: 27px;
+  height: 82px;
+
+  transform:
+    rotate(0deg);
+}
+
+
+/* LEFT */
+
+.leaf-2 {
+  left: 18px;
+  bottom: 8px;
+
+  transform:
+    rotate(-28deg);
+}
+
+.leaf-3 {
+  left: 5px;
+  bottom: 12px;
+
+  transform:
+    rotate(-48deg)
+    scale(0.8);
+}
+
+
+/* RIGHT */
+
+.leaf-4 {
+  right: 16px;
+  bottom: 8px;
+
+  transform:
+    rotate(28deg);
+}
+
+.leaf-5 {
+  right: 2px;
+  bottom: 13px;
+
+  transform:
+    rotate(48deg)
+    scale(0.8);
+}
+
+
+/* =========================================================
+   QUOTE CARD IMPROVEMENT
+========================================================= */
+
+.hero-quote {
+  width: 320px;
+
+  min-height: 215px;
+
+  padding:
+    28px 32px 24px;
+}
+
+.hero-quote p {
+  font-size: 21px;
+
+  line-height: 1.23;
+
+  max-width: 230px;
+}
+
+.quote-badge {
+  font-size: 8px;
+
+  padding:
+    7px 12px;
+}
+
+.quote-mark {
+  font-size: 46px;
+}
+
+
+/* =========================================================
+   STUDENT POSITION
+========================================================= */
+
+.hero-student {
+  left: 50%;
+
+  top: 42px;
+
+  width: 455px;
+  height: 340px;
+}
+
+.student-3d-wrapper {
+  width: 410px;
+  height: 340px;
+}
+
+.dashboard-student-image {
+  width: 410px;
+}
+
+
+/* =========================================================
+   EXTRA 3D DEPTH
+========================================================= */
+
+.student-3d-wrapper {
+  transform-style: preserve-3d;
+
+  filter:
+    drop-shadow(
+      0 20px 25px rgba(80, 45, 150, 0.08)
+    );
+}
+
+
+/* =========================================================
+   SPARKLE POSITION
+========================================================= */
+
+.sparkle-one {
+  left: 95px;
+  top: 70px;
+}
+
+.sparkle-two {
+  right: 42px;
+  bottom: 48px;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 1200px) {
+
+  .better-students-note {
+    left: 25px;
+  }
+
+  .hero-plant {
+    right: 0;
+    transform: scale(0.85);
+    transform-origin: bottom right;
+  }
+
+  .keep-going-note {
+    right: 5px;
+  }
+
+}
+
+
+@media (max-width: 900px) {
+
+  .better-students-note {
+    left: 25%;
+    top: 5px;
+  }
+
+  .hero-plant {
+    right: 5%;
+    bottom: 10px;
+  }
+
+  .keep-going-note {
+    right: 15%;
+    bottom: -10px;
+  }
+
+}
+
+
+@media (max-width: 600px) {
+
+  .better-students-note {
+    left: 15%;
+    top: 10px;
+
+    font-size: 11px;
+  }
+
+  .hero-plant {
+    transform: scale(0.7);
+
+    right: -5px;
+    bottom: 0;
+  }
+
+  .keep-going-note {
+    font-size: 9px;
+
+    right: 5%;
+    bottom: -5px;
+  }
+
+}

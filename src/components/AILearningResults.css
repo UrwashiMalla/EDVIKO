@@ -1,0 +1,461 @@
+/* =========================================
+   AI LEARNING RESULTS PAGE
+========================================= */
+
+.ai-results-page {
+  min-height: 100vh;
+  padding: 28px 50px 60px;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(126, 87, 194, 0.14),
+      transparent 35%
+    ),
+    linear-gradient(
+      135deg,
+      #f8f5ff 0%,
+      #f4f0ff 50%,
+      #ffffff 100%
+    );
+  font-family: Arial, Helvetica, sans-serif;
+  color: #24213a;
+  box-sizing: border-box;
+}
+
+
+
+/* =========================================
+   HEADER
+========================================= */
+
+
+.ai-results-header {
+  max-width: 1250px;
+  margin: 0 auto 28px;
+
+  display: grid;
+  grid-template-columns: 120px 1fr auto;
+  align-items: center;
+
+  gap: 20px;
+}
+
+.ai-back-btn {
+  border: none;
+  background: white;
+  color: #5b3fa3;
+
+  padding: 11px 18px;
+  border-radius: 12px;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 5px 18px rgba(79, 52, 130, 0.08);
+
+  transition: all 0.25s ease;
+}
+
+.ai-back-btn:hover {
+  background: #eee7ff;
+  transform: translateX(-3px);
+}
+
+.ai-results-title {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.ai-results-icon {
+  width: 52px;
+  height: 52px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 16px;
+
+  background: linear-gradient(
+    135deg,
+    #8d6bd8,
+    #6543b5
+  );
+
+  color: white;
+  font-size: 25px;
+
+  box-shadow:
+    0 8px 22px rgba(101, 67, 181, 0.25);
+}
+
+.ai-results-title h1 {
+  margin: 0;
+
+  font-size: 30px;
+  font-weight: 750;
+
+  color: #292440;
+}
+
+.ai-results-title p {
+  margin: 5px 0 0;
+
+  color: #77718b;
+  font-size: 14px;
+}
+
+.ai-language-badge {
+  padding: 10px 16px;
+
+  border-radius: 30px;
+
+  background: white;
+  color: #6443ac;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  box-shadow:
+    0 5px 18px rgba(79, 52, 130, 0.08);
+}
+
+
+/* =========================================
+   HERO
+========================================= */
+
+.ai-results-hero {
+  max-width: 1250px;
+  margin: 0 auto 32px;
+
+  display: flex;
+  align-items: center;
+  gap: 22px;
+
+  padding: 25px 30px;
+
+  border-radius: 22px;
+
+  background: linear-gradient(
+    135deg,
+    #e9ddff,
+    #f7f2ff
+  );
+
+  border: 1px solid rgba(126, 87, 194, 0.12);
+
+  box-shadow:
+    0 10px 30px rgba(79, 52, 130, 0.08);
+}
+
+.ai-hero-icon {
+  min-width: 64px;
+  height: 64px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 20px;
+
+  background: white;
+
+  font-size: 34px;
+
+  box-shadow:
+    0 8px 20px rgba(79, 52, 130, 0.08);
+}
+
+.ai-results-hero h2 {
+  margin: 0 0 7px;
+
+  font-size: 21px;
+  color: #30264b;
+}
+
+.ai-results-hero p {
+  margin: 0;
+
+  color: #6d6680;
+
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+
+/* =========================================
+   TOOLS GRID
+========================================= */
+
+.ai-tools-grid {
+  max-width: 1250px;
+  margin: 0 auto;
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+
+  gap: 22px;
+}
+
+
+/* =========================================
+   TOOL CARD
+========================================= */
+
+.ai-tool-card {
+  position: relative;
+
+  min-height: 255px;
+
+  padding: 27px;
+
+  background: rgba(255, 255, 255, 0.95);
+
+  border: 1px solid #ece6f8;
+
+  border-radius: 22px;
+
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: column;
+
+  box-shadow:
+    0 8px 25px rgba(61, 42, 104, 0.07);
+
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.ai-tool-card:hover {
+  transform: translateY(-7px);
+
+  border-color: #d7c8f4;
+
+  box-shadow:
+    0 16px 35px rgba(61, 42, 104, 0.13);
+}
+
+
+/* =========================================
+   TOOL ICON
+========================================= */
+
+.ai-tool-icon {
+  width: 58px;
+  height: 58px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 17px;
+
+  background: #f1ebff;
+
+  font-size: 29px;
+
+  margin-bottom: 18px;
+}
+
+
+/* =========================================
+   TOOL TITLE
+========================================= */
+
+.ai-tool-card h3 {
+  margin: 0 0 10px;
+
+  font-size: 20px;
+  font-weight: 700;
+
+  color: #2c2740;
+}
+
+
+/* =========================================
+   TOOL DESCRIPTION
+========================================= */
+
+.ai-tool-card p {
+  margin: 0;
+
+  color: #777185;
+
+  font-size: 14px;
+  line-height: 1.65;
+
+  flex: 1;
+}
+
+
+/* =========================================
+   TOOL BUTTON
+========================================= */
+
+.ai-tool-btn {
+  width: 100%;
+
+  margin-top: 20px;
+
+  padding: 13px 17px;
+
+  border: none;
+  border-radius: 12px;
+
+  background: linear-gradient(
+    135deg,
+    #7652c5,
+    #6040a7
+  );
+
+  color: white;
+
+  font-size: 14px;
+  font-weight: 650;
+
+  cursor: pointer;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.ai-tool-btn span {
+  font-size: 18px;
+
+  transition:
+    transform 0.2s ease;
+}
+
+.ai-tool-btn:hover {
+  background: linear-gradient(
+    135deg,
+    #6945b6,
+    #513493
+  );
+
+  box-shadow:
+    0 8px 18px rgba(96, 64, 167, 0.25);
+
+  transform: translateY(-2px);
+}
+
+.ai-tool-btn:hover span {
+  transform: translateX(4px);
+}
+
+.ai-tool-btn:active {
+  transform: translateY(0);
+}
+
+
+/* =========================================
+   TABLET
+========================================= */
+
+@media (max-width: 1000px) {
+
+  .ai-results-page {
+    padding: 25px 30px 50px;
+  }
+
+  .ai-tools-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .ai-results-header {
+    grid-template-columns: 100px 1fr auto;
+  }
+
+  .ai-results-title h1 {
+    font-size: 26px;
+  }
+}
+
+
+/* =========================================
+   MOBILE
+========================================= */
+
+@media (max-width: 700px) {
+
+  .ai-results-page {
+    padding: 20px 16px 40px;
+  }
+
+  .ai-results-header {
+    display: flex;
+    flex-wrap: wrap;
+
+    align-items: center;
+
+    margin-bottom: 22px;
+  }
+
+  .ai-results-title {
+    order: 3;
+
+    width: 100%;
+
+    margin-top: 10px;
+  }
+
+  .ai-results-title h1 {
+    font-size: 23px;
+  }
+
+  .ai-language-badge {
+    margin-left: auto;
+  }
+
+  .ai-results-hero {
+    padding: 20px;
+
+    align-items: flex-start;
+
+    gap: 15px;
+  }
+
+  .ai-hero-icon {
+    min-width: 52px;
+    height: 52px;
+
+    font-size: 27px;
+  }
+
+  .ai-results-hero h2 {
+    font-size: 18px;
+  }
+
+  .ai-results-hero p {
+    font-size: 13px;
+  }
+
+  .ai-tools-grid {
+    grid-template-columns: 1fr;
+
+    gap: 17px;
+  }
+
+  .ai-tool-card {
+    min-height: 235px;
+
+    padding: 23px;
+  }
+}

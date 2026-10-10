@@ -1,0 +1,1032 @@
+/* =========================================
+   GLOBAL
+========================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  background: #faf9ff;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+
+/* =========================================
+   ROLE SELECTION PAGE
+========================================= */
+
+.role-page {
+  position: relative;
+
+  width: 100%;
+  min-height: 100vh;
+
+  display: flex;
+  align-items: center;
+
+  padding: 55px 7%;
+
+  overflow: hidden;
+
+  background:
+    radial-gradient(
+      circle at 12% 12%,
+      rgba(255, 255, 255, 0.95) 0,
+      rgba(255, 255, 255, 0) 28%
+    ),
+    radial-gradient(
+      circle at 88% 20%,
+      rgba(205, 190, 255, 0.45) 0,
+      rgba(205, 190, 255, 0) 35%
+    ),
+    linear-gradient(
+      135deg,
+      #fbfaff 0%,
+      #f3efff 55%,
+      #eee8ff 100%
+    );
+}
+
+
+/* =========================================
+   DECORATIVE BACKGROUND
+========================================= */
+
+.background-circle {
+  position: absolute;
+
+  border-radius: 50%;
+
+  pointer-events: none;
+
+  z-index: 0;
+}
+
+.circle-one {
+  width: 390px;
+  height: 390px;
+
+  top: -200px;
+  left: -120px;
+
+  background: rgba(122, 82, 225, 0.08);
+}
+
+.circle-two {
+  width: 480px;
+  height: 480px;
+
+  right: -220px;
+  bottom: -250px;
+
+  background: rgba(145, 110, 240, 0.10);
+}
+
+
+/* =========================================
+   LEFT SIDE
+========================================= */
+
+.intro-section {
+  position: relative;
+
+  z-index: 2;
+
+  width: 58%;
+  height: 88vh;
+
+  display: flex;
+  flex-direction: column;
+
+  justify-content: flex-start;
+
+  padding-top: 25px;
+}
+
+
+/* =========================================
+   LOGO
+========================================= */
+
+.logo {
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+
+  margin-bottom: 65px;
+
+  font-size: 22px;
+
+  color: #17133d;
+}
+
+.logo span {
+  font-size: 27px;
+}
+
+.logo strong {
+  letter-spacing: 1px;
+}
+
+
+/* =========================================
+   INTRO TEXT
+========================================= */
+
+.intro-text {
+  margin-left: 10px;
+
+  position: relative;
+
+  z-index: 5;
+}
+
+.small-heading {
+  margin: 0 0 14px;
+
+  font-size: 13px;
+
+  font-weight: 800;
+
+  letter-spacing: 2px;
+
+  color: #7044e5;
+}
+
+.intro-text h1 {
+  margin: 0;
+
+  font-size: clamp(48px, 5vw, 72px);
+
+  line-height: 1.02;
+
+  letter-spacing: -2px;
+
+  color: #17133d;
+}
+
+.intro-text h1 span {
+  color: #7044e5;
+}
+
+.description {
+  width: 470px;
+
+  max-width: 90%;
+
+  margin-top: 25px;
+
+  font-size: 17px;
+
+  line-height: 1.65;
+
+  color: #77718f;
+}
+
+
+/* =========================================
+   STUDENT ILLUSTRATION
+========================================= */
+
+.student-image {
+  position: absolute;
+
+  z-index: 2;
+
+  width: 480px;
+
+  height: auto;
+
+  max-width: 52%;
+
+  left: 17%;
+
+  bottom: -10px;
+
+  object-fit: contain;
+
+  filter:
+    drop-shadow(
+      0 22px 28px rgba(78, 53, 150, 0.14)
+    );
+}
+
+
+/* =========================================
+   RIGHT SELECTION CARD
+========================================= */
+
+.selection-card {
+  position: relative;
+
+  z-index: 5;
+
+  flex-shrink: 0;
+
+  width: 430px;
+
+  padding: 42px;
+
+  margin-left: auto;
+
+  background: rgba(255, 255, 255, 0.92);
+
+  border: 1px solid rgba(255, 255, 255, 0.95);
+
+  border-radius: 30px;
+
+  box-shadow:
+    0 28px 70px rgba(78, 52, 150, 0.14),
+    0 6px 20px rgba(78, 52, 150, 0.05);
+
+  backdrop-filter: blur(16px);
+}
+
+
+/* =========================================
+   CARD TEXT
+========================================= */
+
+.hello-text {
+  margin: 0 0 9px;
+
+  font-size: 16px;
+
+  font-weight: 600;
+
+  color: #7955dd;
+}
+
+.selection-card h2 {
+  margin: 0;
+
+  font-size: 31px;
+
+  line-height: 1.18;
+
+  letter-spacing: -0.5px;
+
+  color: #17133d;
+}
+
+.choose-text {
+  margin: 13px 0 30px;
+
+  font-size: 15px;
+
+  color: #858097;
+}
+
+
+/* =========================================
+   ROLE CARDS
+========================================= */
+
+.role-card {
+  width: 100%;
+
+  min-height: 108px;
+
+  display: flex;
+
+  align-items: center;
+
+  padding: 18px;
+
+  margin-bottom: 16px;
+
+  border: 1px solid #e7e0f7;
+
+  border-radius: 19px;
+
+  background: #ffffff;
+
+  cursor: pointer;
+
+  text-align: left;
+
+  outline: none;
+
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.role-card:hover {
+  border-color: #a58ae8;
+
+  box-shadow:
+    0 12px 30px rgba(105, 69, 210, 0.13);
+}
+
+
+/* =========================================
+   ROLE ICON
+========================================= */
+
+.role-icon {
+  width: 58px;
+  height: 58px;
+
+  flex-shrink: 0;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 16px;
+
+  font-size: 27px;
+}
+
+.student-icon {
+  background: #eee8ff;
+}
+
+.teacher-icon {
+  background: #fff0dc;
+}
+
+
+/* =========================================
+   ROLE INFORMATION
+========================================= */
+
+.role-info {
+  flex: 1;
+
+  margin-left: 15px;
+
+  min-width: 0;
+}
+
+.role-info h3 {
+  margin: 0 0 6px;
+
+  font-size: 17px;
+
+  font-weight: 700;
+
+  color: #24203e;
+}
+
+.role-info p {
+  margin: 0;
+
+  font-size: 13px;
+
+  line-height: 1.45;
+
+  color: #89849b;
+}
+
+.arrow {
+  flex-shrink: 0;
+
+  margin-left: 10px;
+
+  font-size: 25px;
+
+  color: #7652dc;
+
+  transition: transform 0.25s ease;
+}
+
+.role-card:hover .arrow {
+  transform: translateX(5px);
+}
+
+
+/* =========================================
+   BOTTOM TEXT
+========================================= */
+
+.bottom-text {
+  margin: 24px 0 0;
+
+  text-align: center;
+
+  font-size: 12px;
+
+  color: #9690a7;
+}
+
+
+/* =========================================
+   STUDENT LOGIN PAGE
+========================================= */
+
+.login-page {
+  position: relative;
+
+  width: 100%;
+
+  min-height: 100vh;
+
+  display: flex;
+
+  align-items: center;
+
+  padding: 55px 7%;
+
+  overflow: hidden;
+
+  background:
+    radial-gradient(
+      circle at 10% 15%,
+      rgba(255, 255, 255, 0.95) 0,
+      rgba(255, 255, 255, 0) 30%
+    ),
+    radial-gradient(
+      circle at 90% 20%,
+      rgba(205, 190, 255, 0.45) 0,
+      rgba(205, 190, 255, 0) 35%
+    ),
+    linear-gradient(
+      135deg,
+      #fbfaff 0%,
+      #f3efff 55%,
+      #eee8ff 100%
+    );
+}
+
+
+/* =========================================
+   LOGIN LEFT
+========================================= */
+
+.login-intro {
+  position: relative;
+
+  z-index: 2;
+
+  width: 58%;
+
+  height: 88vh;
+
+  display: flex;
+
+  flex-direction: column;
+
+  justify-content: flex-start;
+
+  padding-top: 25px;
+}
+
+.login-logo {
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+
+  margin-bottom: 65px;
+
+  font-size: 22px;
+
+  color: #17133d;
+}
+
+.login-logo span {
+  font-size: 27px;
+}
+
+.login-welcome {
+  margin-left: 10px;
+
+  position: relative;
+
+  z-index: 5;
+}
+
+.login-small-title {
+  margin: 0 0 14px;
+
+  color: #7044e5;
+
+  font-size: 13px;
+
+  font-weight: 800;
+
+  letter-spacing: 2px;
+}
+
+.login-welcome h1 {
+  margin: 0;
+
+  font-size: clamp(45px, 4.8vw, 68px);
+
+  line-height: 1.03;
+
+  letter-spacing: -2px;
+
+  color: #17133d;
+}
+
+.login-welcome h1 span {
+  color: #7044e5;
+}
+
+.login-welcome > p:last-child {
+  width: 480px;
+
+  max-width: 90%;
+
+  margin-top: 25px;
+
+  font-size: 17px;
+
+  line-height: 1.65;
+
+  color: #77718f;
+}
+
+
+/* Login image */
+
+.login-student-image {
+  position: absolute;
+
+  z-index: 2;
+
+  width: 470px;
+
+  left: 17%;
+
+  bottom: -10px;
+
+  object-fit: contain;
+
+  filter:
+    drop-shadow(
+      0 22px 28px rgba(78, 53, 150, 0.14)
+    );
+
+  animation:
+    loginStudentFloat 4s ease-in-out infinite;
+}
+
+@keyframes loginStudentFloat {
+
+  0% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-9px);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+
+}
+
+
+/* =========================================
+   LOGIN CARD
+========================================= */
+
+.login-card {
+  position: relative;
+
+  z-index: 5;
+
+  flex-shrink: 0;
+
+  width: 455px;
+
+  padding: 28px 42px 38px;
+
+  margin-left: auto;
+
+  background: rgba(255, 255, 255, 0.94);
+
+  border-radius: 30px;
+
+  box-shadow:
+    0 28px 70px rgba(78, 52, 150, 0.16),
+    0 6px 20px rgba(78, 52, 150, 0.05);
+
+  backdrop-filter: blur(16px);
+}
+
+
+/* =========================================
+   LOGIN FORM
+========================================= */
+
+.back-button {
+  border: none;
+
+  padding: 0;
+
+  margin-bottom: 25px;
+
+  background: transparent;
+
+  color: #7552df;
+
+  font-size: 13px;
+
+  cursor: pointer;
+}
+
+.back-button:hover {
+  text-decoration: underline;
+}
+
+.login-hello {
+  margin: 0 0 7px;
+
+  color: #7552df;
+
+  font-size: 16px;
+
+  font-weight: 600;
+}
+
+.login-card h2 {
+  margin: 0;
+
+  font-size: 32px;
+
+  color: #17133d;
+}
+
+.login-subtitle {
+  margin: 9px 0 27px;
+
+  color: #858097;
+
+  font-size: 14px;
+}
+
+
+/* Inputs */
+
+.input-group {
+  margin-bottom: 18px;
+}
+
+.input-group label {
+  display: block;
+
+  margin-bottom: 8px;
+
+  font-size: 13px;
+
+  font-weight: 600;
+
+  color: #38334f;
+}
+
+.input-wrapper {
+  height: 52px;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+
+  padding: 0 15px;
+
+  border: 1px solid #e4def3;
+
+  border-radius: 14px;
+
+  background: #ffffff;
+
+  transition: 0.25s ease;
+}
+
+.input-wrapper:focus-within {
+  border-color: #8b68e8;
+
+  box-shadow:
+    0 0 0 4px rgba(112, 68, 229, 0.08);
+}
+
+.input-wrapper input {
+  width: 100%;
+
+  border: none;
+
+  outline: none;
+
+  background: transparent;
+
+  font-size: 14px;
+
+  color: #292541;
+}
+
+.input-wrapper input::placeholder {
+  color: #aaa5b8;
+}
+
+
+/* Options */
+
+.login-options {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  margin: 8px 0 22px;
+
+  font-size: 12px;
+}
+
+.remember {
+  display: flex;
+
+  align-items: center;
+
+  gap: 6px;
+
+  color: #77718f;
+}
+
+.forgot-button {
+  border: none;
+
+  background: transparent;
+
+  color: #7044e5;
+
+  cursor: pointer;
+
+  font-size: 12px;
+}
+
+
+/* Login button */
+
+.login-button {
+  width: 100%;
+
+  height: 53px;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  padding: 0 20px;
+
+  border: none;
+
+  border-radius: 15px;
+
+  background:
+    linear-gradient(
+      90deg,
+      #7044e5,
+      #8a4ff0
+    );
+
+  color: #ffffff;
+
+  font-size: 16px;
+
+  font-weight: 600;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 10px 25px rgba(112, 68, 229, 0.25);
+}
+
+
+/* Divider */
+
+.divider {
+  display: flex;
+
+  align-items: center;
+
+  gap: 12px;
+
+  margin: 24px 0 18px;
+}
+
+.divider span {
+  flex: 1;
+
+  height: 1px;
+
+  background: #e8e3f1;
+}
+
+.divider p {
+  margin: 0;
+
+  color: #9690a7;
+
+  font-size: 12px;
+}
+
+
+/* Social */
+
+.social-buttons {
+  display: flex;
+
+  justify-content: center;
+
+  gap: 15px;
+}
+
+.social-buttons button {
+  width: 45px;
+  height: 45px;
+
+  border-radius: 50%;
+
+  border: 1px solid #e5dff2;
+
+  background: #ffffff;
+
+  color: #6040c7;
+
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+
+/* Signup */
+
+.signup-text {
+  margin: 22px 0 0;
+
+  text-align: center;
+
+  color: #858097;
+
+  font-size: 13px;
+}
+
+.signup-button {
+  border: none;
+
+  background: transparent;
+
+  color: #7044e5;
+
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+
+/* =========================================
+   TABLET
+========================================= */
+
+@media (max-width: 1100px) {
+
+  .role-page,
+  .login-page {
+    padding: 40px 4%;
+  }
+
+  .intro-section,
+  .login-intro {
+    width: 55%;
+  }
+
+  .selection-card {
+    width: 400px;
+  }
+
+  .login-card {
+    width: 420px;
+  }
+
+  .student-image {
+    width: 410px;
+    left: 12%;
+  }
+
+  .login-student-image {
+    width: 410px;
+    left: 12%;
+  }
+}
+
+
+/* =========================================
+   MOBILE
+========================================= */
+
+@media (max-width: 850px) {
+
+  .role-page,
+  .login-page {
+    min-height: 100vh;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    justify-content: flex-start;
+
+    padding: 30px 20px;
+  }
+
+  .intro-section,
+  .login-intro {
+    width: 100%;
+
+    height: auto;
+
+    min-height: auto;
+
+    align-items: center;
+
+    text-align: center;
+
+    padding-top: 5px;
+  }
+
+  .logo,
+  .login-logo {
+    margin-bottom: 30px;
+  }
+
+  .intro-text,
+  .login-welcome {
+    margin-left: 0;
+  }
+
+  .intro-text h1,
+  .login-welcome h1 {
+    font-size: 48px;
+  }
+
+  .description,
+  .login-welcome > p:last-child {
+    width: auto;
+
+    max-width: 600px;
+
+    margin-left: auto;
+
+    margin-right: auto;
+  }
+
+  .student-image,
+  .login-student-image {
+    position: relative;
+
+    left: auto;
+
+    bottom: auto;
+
+    width: 330px;
+
+    max-width: 85%;
+
+    margin-top: 15px;
+  }
+
+  .selection-card,
+  .login-card {
+    width: 100%;
+
+    max-width: 500px;
+
+    margin: 30px 0 0;
+  }
+}

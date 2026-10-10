@@ -1,0 +1,418 @@
+/* =========================================
+   AI TUTOR PAGE
+========================================= */
+
+.ai-tutor-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f7f4ff, #ffffff);
+  padding: 28px 45px;
+  box-sizing: border-box;
+  color: #272343;
+}
+
+
+/* =========================================
+   HEADER
+========================================= */
+
+.ai-tutor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+  margin-bottom: 30px;
+}
+
+.ai-tutor-back-btn {
+  border: none;
+  background: #ffffff;
+  color: #5b4bb7;
+  padding: 11px 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 5px 18px rgba(91, 75, 183, 0.08);
+  transition: 0.25s ease;
+}
+
+.ai-tutor-back-btn:hover {
+  transform: translateX(-3px);
+  background: #f0ebff;
+}
+
+.ai-tutor-title {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex: 1;
+}
+
+.ai-tutor-title-icon {
+  width: 55px;
+  height: 55px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #7456d8, #9a7bea);
+  border-radius: 16px;
+  font-size: 27px;
+  box-shadow: 0 10px 25px rgba(116, 86, 216, 0.22);
+}
+
+.ai-tutor-title h1 {
+  margin: 0;
+  font-size: 27px;
+  color: #2d2554;
+}
+
+.ai-tutor-title p {
+  margin: 4px 0 0;
+  color: #77718f;
+  font-size: 14px;
+}
+
+.ai-tutor-language {
+  background: #ffffff;
+  padding: 11px 17px;
+  border-radius: 12px;
+  color: #5b4bb7;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 5px 18px rgba(91, 75, 183, 0.08);
+}
+
+
+/* =========================================
+   MAIN CONTAINER
+========================================= */
+
+.ai-tutor-container {
+  max-width: 1050px;
+  margin: 0 auto;
+  min-height: calc(100vh - 145px);
+  display: flex;
+  flex-direction: column;
+}
+
+
+/* =========================================
+   WELCOME CARD
+========================================= */
+
+.ai-tutor-welcome {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #eee9ff;
+  border-radius: 24px;
+  padding: 55px 35px;
+  text-align: center;
+  box-shadow: 0 15px 45px rgba(91, 75, 183, 0.09);
+  margin-top: 25px;
+}
+
+.ai-tutor-welcome-icon {
+  width: 85px;
+  height: 85px;
+  margin: 0 auto 20px;
+  border-radius: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #7456d8, #a88cf0);
+  font-size: 43px;
+  box-shadow: 0 15px 30px rgba(116, 86, 216, 0.25);
+}
+
+.ai-tutor-welcome h2 {
+  margin: 0 0 10px;
+  color: #30265d;
+  font-size: 26px;
+}
+
+.ai-tutor-welcome > p {
+  max-width: 620px;
+  margin: 0 auto;
+  color: #77718f;
+  line-height: 1.7;
+  font-size: 15px;
+}
+
+
+/* =========================================
+   SUGGESTIONS
+========================================= */
+
+.ai-tutor-suggestions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 30px;
+}
+
+.ai-tutor-suggestions button {
+  border: 1px solid #e4dcff;
+  background: #faf8ff;
+  color: #5a4aa9;
+  padding: 12px 17px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.25s ease;
+}
+
+.ai-tutor-suggestions button:hover {
+  background: #eee8ff;
+  border-color: #cfc2ff;
+  transform: translateY(-2px);
+}
+
+
+/* =========================================
+   CHAT AREA
+========================================= */
+
+.ai-tutor-chat {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #eee9ff;
+  border-radius: 22px;
+  padding: 25px;
+  box-shadow: 0 12px 35px rgba(91, 75, 183, 0.07);
+  overflow-y: auto;
+  margin-bottom: 18px;
+  min-height: 430px;
+  max-height: 560px;
+}
+
+
+/* =========================================
+   MESSAGE
+========================================= */
+
+.ai-tutor-message {
+  display: flex;
+  gap: 13px;
+  margin-bottom: 22px;
+  max-width: 85%;
+}
+
+.user-message {
+  margin-left: auto;
+  flex-direction: row-reverse;
+}
+
+.message-avatar {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eee9ff;
+  font-size: 21px;
+}
+
+.user-message .message-avatar {
+  background: #e4dcff;
+}
+
+.message-content {
+  background: #f7f4ff;
+  border-radius: 15px;
+  padding: 13px 16px;
+  max-width: 700px;
+}
+
+.user-message .message-content {
+  background: linear-gradient(135deg, #7355d6, #886be0);
+  color: #ffffff;
+}
+
+.message-name {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  opacity: 0.75;
+}
+
+.message-content p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.typing-text {
+  animation: tutorTyping 1.2s infinite;
+}
+
+@keyframes tutorTyping {
+  0% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.35;
+  }
+}
+
+
+/* =========================================
+   ERROR
+========================================= */
+
+.ai-tutor-error {
+  background: #fff1f1;
+  border: 1px solid #ffd2d2;
+  color: #b13d3d;
+  padding: 12px 15px;
+  border-radius: 12px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+
+/* =========================================
+   INPUT AREA
+========================================= */
+
+.ai-tutor-input-area {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  background: #ffffff;
+  border: 1px solid #e7e0ff;
+  border-radius: 18px;
+  padding: 10px;
+  box-shadow: 0 10px 30px rgba(91, 75, 183, 0.08);
+}
+
+.ai-tutor-input-area textarea {
+  flex: 1;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 12px 13px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #30265d;
+  background: transparent;
+  line-height: 1.5;
+}
+
+.ai-tutor-input-area textarea::placeholder {
+  color: #aaa4bb;
+}
+
+.ai-tutor-send-btn {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #7355d6, #9679e9);
+  color: #ffffff;
+  font-size: 21px;
+  cursor: pointer;
+  transition: 0.25s ease;
+  box-shadow: 0 8px 18px rgba(115, 85, 214, 0.25);
+}
+
+.ai-tutor-send-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 11px 22px rgba(115, 85, 214, 0.32);
+}
+
+.ai-tutor-send-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+
+/* =========================================
+   BOTTOM
+========================================= */
+
+.ai-tutor-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  color: #8b859e;
+  font-size: 12px;
+}
+
+.ai-tutor-bottom button {
+  border: none;
+  background: transparent;
+  color: #8b63c7;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 10px;
+}
+
+.ai-tutor-bottom button:hover {
+  color: #6045ad;
+}
+
+
+/* =========================================
+   RESPONSIVE
+========================================= */
+
+@media (max-width: 768px) {
+
+  .ai-tutor-page {
+    padding: 20px;
+  }
+
+  .ai-tutor-header {
+    flex-wrap: wrap;
+  }
+
+  .ai-tutor-title {
+    order: 3;
+    width: 100%;
+  }
+
+  .ai-tutor-title h1 {
+    font-size: 22px;
+  }
+
+  .ai-tutor-language {
+    margin-left: auto;
+  }
+
+  .ai-tutor-welcome {
+    padding: 40px 20px;
+  }
+
+  .ai-tutor-suggestions {
+    flex-direction: column;
+  }
+
+  .ai-tutor-suggestions button {
+    width: 100%;
+  }
+
+  .ai-tutor-chat {
+    padding: 17px;
+  }
+
+  .ai-tutor-message {
+    max-width: 95%;
+  }
+
+  .ai-tutor-bottom {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+}
