@@ -139,7 +139,7 @@ function QuestionGenerator({ onBack, language = "English", onLanguageChange, tex
         <div>
           <h2>Master concepts with targeted questions</h2>
           <p>
-            LERNIQ creates exactly 10 questions progressing from foundational to challenging based strictly on your document.
+            EDVIKO creates exactly 10 questions progressing from foundational to challenging based strictly on your document.
           </p>
         </div>
       </motion.div>

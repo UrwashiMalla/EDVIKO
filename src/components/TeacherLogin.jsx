@@ -2,11 +2,13 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
+import { getInstitutionName, setInstitutionName } from "../services/frontendStorage";
 import studentImage from "../assets/student/student.png";
 
 function TeacherLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [institution, setInstitution] = useState(getInstitutionName() || "");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -25,6 +27,9 @@ function TeacherLogin() {
     setLoading(true);
 
     try {
+      if (institution.trim()) {
+        setInstitutionName(institution.trim());
+      }
       await loginTeacher(email.trim(), password);
       navigate("/teacher/dashboard");
     } catch (err) {
@@ -45,7 +50,7 @@ function TeacherLogin() {
       >
         <div className="login-logo">
           <span>🎓</span>
-          <strong>LERNIQ</strong>
+          <strong>EDVIKO</strong>
         </div>
 
         <div className="login-welcome">
@@ -120,6 +125,20 @@ function TeacherLogin() {
           </div>
 
           <form onSubmit={handleLogin}>
+            {/* University / School / College Block */}
+            <div className="input-group">
+              <label>University / School / College Name</label>
+              <div className="input-wrapper">
+                <span>🏛️</span>
+                <input
+                  type="text"
+                  placeholder="e.g. Stanford University / MIT / Delhi University"
+                  value={institution}
+                  onChange={(e) => setInstitution(e.target.value)}
+                />
+              </div>
+            </div>
+
             <div className="input-group">
               <label>Faculty Email</label>
               <div className="input-wrapper">

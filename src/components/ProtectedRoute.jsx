@@ -19,7 +19,7 @@ export default function ProtectedRoute({ role, children }) {
           color: "#6b46c1",
         }}
       >
-        <span>🎓 Loading LERNIQ...</span>
+        <span>🎓 Loading EDVIKO...</span>
       </div>
     );
   }

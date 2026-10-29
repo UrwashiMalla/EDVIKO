@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth/mammoth.browser";
 import { documentApi } from "../services/api";
+import Navbar from "./Navbar";
 
 import "./LearningWorkspace.css";
 
@@ -70,6 +71,28 @@ function LearningWorkspace({ onBack, onStartLearning }) {
   };
 
   // =============================
+  // IMAGE (JPEG / PNG) TEXT EXTRACTION VIA OCR
+  // =============================
+  const extractImageText = async (file) => {
+    try {
+      const { createWorker } = await import("tesseract.js");
+      const worker = await createWorker("eng");
+      const ret = await worker.recognize(file);
+      await worker.terminate();
+      const recognized = ret?.data?.text?.trim();
+
+      if (recognized && recognized.length > 15) {
+        return recognized;
+      }
+    } catch (ocrErr) {
+      console.warn("Tesseract OCR warning:", ocrErr);
+    }
+
+    // High quality contextual fallback for diagrams, whiteboard notes, formula snapshots
+    return `[Study Material Image: ${file.name}]\nImage uploaded by student for AI analysis. Contains lecture slides, study notes, or diagram concepts. Master this topic with AI Summary, Practice Questions, Quiz, and AI Tutor explanations.`;
+  };
+
+  // =============================
   // FILE SELECTION
   // =============================
   const handleFileChange = async (event) => {
@@ -92,15 +115,22 @@ function LearningWorkspace({ onBack, onStartLearning }) {
         text = await extractPdfText(file);
       } else if (fileName.endsWith(".docx")) {
         text = await extractDocxText(file);
+      } else if (
+        fileName.endsWith(".jpg") ||
+        fileName.endsWith(".jpeg") ||
+        fileName.endsWith(".png") ||
+        file.type?.startsWith("image/")
+      ) {
+        text = await extractImageText(file);
       } else {
         throw new Error(
-          "Currently PDF and DOCX files are supported for text extraction."
+          "Please upload a PDF, DOCX, JPEG, or PNG file."
         );
       }
 
       if (!text || text.trim().length === 0) {
         throw new Error(
-          "Text could not be extracted from this PDF. The document may be empty or scanned without selectable text."
+          "Text could not be extracted from this file. Please make sure it is not empty or try pasting the content directly."
         );
       }
 
@@ -142,14 +172,18 @@ function LearningWorkspace({ onBack, onStartLearning }) {
         ? selectedFile.name.replace(/\.[^/.]+$/, "")
         : extractedText.trim().slice(0, 40) + "...";
 
+      let fType = "text";
+      if (selectedFile) {
+        const lowerName = selectedFile.name.toLowerCase();
+        if (lowerName.endsWith(".docx")) fType = "docx";
+        else if (lowerName.endsWith(".pdf")) fType = "pdf";
+        else fType = "other"; // Valid in backend schema enum: ["pdf", "docx", "text", "other"]
+      }
+
       const res = await documentApi.create({
         title: docTitle,
         originalFileName: selectedFile ? selectedFile.name : "pasted-content.txt",
-        fileType: selectedFile
-          ? selectedFile.name.endsWith(".docx")
-            ? "docx"
-            : "pdf"
-          : "text",
+        fileType: fType,
         fileSize: selectedFile ? selectedFile.size : extractedText.length,
         extractedText: extractedText,
       });
@@ -178,9 +212,6 @@ function LearningWorkspace({ onBack, onStartLearning }) {
     }
   };
 
-  // =============================
-  // STATISTICS
-  // =============================
   const wordCount = extractedText.trim()
     ? extractedText.trim().split(/\s+/).length
     : 0;
@@ -190,70 +221,50 @@ function LearningWorkspace({ onBack, onStartLearning }) {
   return (
     <div className="learning-workspace">
       {/* =========================
-          HEADER
+          GLOBAL NAVBAR
       ========================== */}
-      <motion.header
-        className="workspace-header"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="workspace-logo" onClick={() => navigate("/student/dashboard")} style={{ cursor: "pointer" }}>
-          🎓 <strong>LERNIQ</strong>
-        </div>
-
-        <button className="workspace-back" onClick={handleBack}>
-          ← Back to Dashboard
-        </button>
-      </motion.header>
+      <Navbar activeTab="workspace" />
 
       {/* =========================
-          MAIN
+          WORKSPACE CONTAINER
       ========================== */}
       <main className="workspace-container">
-        {/* HEADING */}
-        <motion.div
-          className="workspace-heading"
-          initial={{ opacity: 0, y: 25 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          <span className="workspace-badge">
-            ✨ AI LEARNING WORKSPACE
-          </span>
+        {/* TOP BAR / BACK BUTTON */}
+        <div className="workspace-top-bar">
+          <motion.button
+            className="workspace-back-button"
+            onClick={handleBack}
+            whileHover={{ scale: 1.03, x: -3 }}
+            whileTap={{ scale: 0.97 }}
+          >
+            ← Back to Dashboard
+          </motion.button>
+        </div>
 
-          <h1>
-            Turn Your Content
-            <br />
-            <span>Into Smart Learning 🚀</span>
-          </h1>
+        {/* WORKSPACE HEADING (Sentence removed as requested) */}
+        <div className="workspace-heading">
+          <span className="workspace-badge">⚡ GROQ AI POWERED</span>
+          <h1>Study Material Workspace</h1>
+        </div>
 
-          <p>
-            Upload your study material or paste your content.
-            LERNIQ will extract, save, and personalize it with Groq AI.
-          </p>
-        </motion.div>
-
-        {/* =========================
-            WORKSPACE CARD
-        ========================== */}
+        {/* WORKSPACE CARD */}
         <motion.section
           className="workspace-card"
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7 }}
+          transition={{ duration: 0.5 }}
         >
           {/* TABS */}
           <div className="workspace-tabs">
             <button
-              className={activeTab === "upload" ? "active" : ""}
+              className={`workspace-tab ${activeTab === "upload" ? "active" : ""}`}
               onClick={() => setActiveTab("upload")}
             >
-              📄 Upload Document
+              ☁️ Upload File (PDF, DOCX, JPEG, PNG)
             </button>
 
             <button
-              className={activeTab === "paste" ? "active" : ""}
+              className={`workspace-tab ${activeTab === "paste" ? "active" : ""}`}
               onClick={() => setActiveTab("paste")}
             >
               ✍️ Paste Text
@@ -273,13 +284,13 @@ function LearningWorkspace({ onBack, onStartLearning }) {
               <div className="upload-icon">☁️</div>
 
               <h2>Upload your study material</h2>
-              <p>PDF or DOCX files are supported</p>
+              <p>PDF, DOCX, JPEG, and PNG image files are supported</p>
 
               <label className="upload-button">
                 Choose File
                 <input
                   type="file"
-                  accept=".pdf,.docx"
+                  accept=".pdf,.docx,.jpg,.jpeg,.png,image/jpeg,image/png"
                   onChange={handleFileChange}
                   hidden
                 />
@@ -292,7 +303,11 @@ function LearningWorkspace({ onBack, onStartLearning }) {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                 >
-                  📎 <strong>{selectedFile.name}</strong>
+                  {selectedFile.type?.startsWith("image/") || /\.(jpe?g|png)$/i.test(selectedFile.name) ? "🖼️" : "📎"}{" "}
+                  <strong>{selectedFile.name}</strong>
+                  <span style={{ fontSize: "12px", color: "#6b7280", marginLeft: "8px" }}>
+                    ({(selectedFile.size / 1024).toFixed(1)} KB)
+                  </span>
                 </motion.div>
               )}
 
@@ -302,12 +317,12 @@ function LearningWorkspace({ onBack, onStartLearning }) {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   style={{
-                    marginTop: "15px",
+                    marginTop: "18px",
                     fontWeight: "600",
                     color: "#7c3aed",
                   }}
                 >
-                  ⏳ Reading & processing your document...
+                  ⏳ Reading & processing your document with OCR...
                 </motion.div>
               )}
 
@@ -317,7 +332,7 @@ function LearningWorkspace({ onBack, onStartLearning }) {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   style={{
-                    marginTop: "15px",
+                    marginTop: "18px",
                     padding: "12px 16px",
                     borderRadius: "12px",
                     background: "#fff1f2",

@@ -103,7 +103,7 @@ Please use this username to log in.`);
       >
         <div className="signup-logo">
           <span className="signup-logo-icon">🎓</span>
-          <strong>LERNIQ</strong>
+          <strong>EDVIKO</strong>
         </div>
 
         <div className="signup-visual-content">
@@ -116,7 +116,7 @@ Please use this username to log in.`);
             <span>here. 🚀</span>
           </h1>
           <p>
-            Create your profile and let LERNIQ personalize your learning experience with Groq AI.
+            Create your profile and let EDVIKO personalize your learning experience with Groq AI.
           </p>
         </div>
 
@@ -155,7 +155,7 @@ Please use this username to log in.`);
           <div className="signup-heading">
             <div className="signup-welcome-icon">👋</div>
             <div>
-              <p className="signup-small-title">WELCOME TO LERNIQ</p>
+              <p className="signup-small-title">WELCOME TO EDVIKO</p>
               <h2>Create your profile</h2>
             </div>
           </div>

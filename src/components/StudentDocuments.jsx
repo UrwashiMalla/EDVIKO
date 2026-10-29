@@ -47,6 +47,18 @@ function StudentDocuments() {
     }
   };
 
+  const getDocIcon = (doc) => {
+    if (doc.fileType === "docx") return "📘";
+    if (doc.fileType === "pdf") return "📕";
+    if (
+      doc.originalFileName?.match(/\.(jpe?g|png)$/i) ||
+      doc.fileType === "other"
+    ) {
+      return "🖼️";
+    }
+    return "📄";
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "#faf9ff" }}>
       <Navbar activeTab="documents" />
@@ -106,7 +118,7 @@ function StudentDocuments() {
             <span style={{ fontSize: "48px" }}>📚</span>
             <h3 style={{ fontSize: "20px", color: "#1f2937", marginTop: "12px" }}>No documents uploaded yet</h3>
             <p style={{ color: "#6b7280", maxWidth: "450px", margin: "8px auto 20px" }}>
-              Upload a lecture PDF or paste notes to generate your first AI summary, practice questions, and quiz!
+              Upload a lecture PDF, Word doc, JPEG/PNG image, or paste notes to generate your first AI summary, practice questions, and quiz!
             </p>
             <button
               onClick={() => navigate("/student/workspace")}
@@ -145,7 +157,7 @@ function StudentDocuments() {
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <span style={{ fontSize: "24px" }}>
-                      {doc.fileType === "docx" ? "📘" : doc.fileType === "pdf" ? "📕" : "📄"}
+                      {getDocIcon(doc)}
                     </span>
                     <button
                       onClick={(e) => handleDelete(doc.id, e)}

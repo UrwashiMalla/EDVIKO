@@ -53,7 +53,7 @@ function StudentLogin() {
       >
         <div className="login-logo">
           <span>🎓</span>
-          <strong>LERNIQ</strong>
+          <strong>EDVIKO</strong>
         </div>
 
         <div className="login-welcome">

@@ -24,7 +24,7 @@ function RoleSelection() {
         {/* Logo */}
         <div className="logo">
           <span>🎓</span>
-          <strong>LERNIQ</strong>
+          <strong>EDVIKO</strong>
         </div>
 
         {/* Welcome Text */}
@@ -33,7 +33,7 @@ function RoleSelection() {
           <h1>
             Welcome to
             <br />
-            <span>LERNIQ</span>
+            <span>EDVIKO</span>
           </h1>
           <p className="description">
             Learn smarter, understand better, and grow with personalized AI learning.
@@ -63,7 +63,7 @@ function RoleSelection() {
         {/* Greeting */}
         <p className="hello-text">Hello Learner 👋</p>
         <h2>How do you want to continue?</h2>
-        <p className="choose-text">Select your role to enter LERNIQ</p>
+        <p className="choose-text">Select your role to enter EDVIKO</p>
 
         {/* =========================
             STUDENT BUTTON

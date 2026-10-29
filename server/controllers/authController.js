@@ -158,7 +158,12 @@ const verifyStudentOtp = async (req, res, next) => {
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    let finalEmail = email.toLowerCase().trim();
+    if (!finalEmail.includes('@')) {
+      finalEmail = finalEmail + '@lerniq.edu';
+    }
+
+    const user = await User.findOne({ email: finalEmail });
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -188,7 +193,12 @@ const resendOtp = async (req, res, next) => {
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    let finalEmail = email.toLowerCase().trim();
+    if (!finalEmail.includes('@')) {
+      finalEmail = finalEmail + '@lerniq.edu';
+    }
+
+    const user = await User.findOne({ email: finalEmail });
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -228,7 +238,12 @@ const loginStudent = async (req, res, next) => {
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    let finalEmail = email.toLowerCase().trim();
+    if (!finalEmail.includes('@')) {
+      finalEmail = finalEmail + '@lerniq.edu';
+    }
+
+    const user = await User.findOne({ email: finalEmail });
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -288,7 +303,12 @@ const loginTeacher = async (req, res, next) => {
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    let finalEmail = email.toLowerCase().trim();
+    if (!finalEmail.includes('@')) {
+      finalEmail = finalEmail + '@lerniq.edu';
+    }
+
+    const user = await User.findOne({ email: finalEmail });
     if (!user) {
       return res.status(401).json({
         success: false,

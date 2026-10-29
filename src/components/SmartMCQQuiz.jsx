@@ -260,7 +260,7 @@ function SmartMCQQuiz({ onBack, language = "English", onLanguageChange, text = "
 
           <h2>Ready to test your knowledge?</h2>
           <p>
-            LERNIQ will generate 10 multiple-choice questions based strictly on your uploaded document, calculate your score, and record your performance.
+            EDVIKO will generate 10 multiple-choice questions based strictly on your uploaded document, calculate your score, and record your performance.
           </p>
 
           <div className="quiz-info-grid">

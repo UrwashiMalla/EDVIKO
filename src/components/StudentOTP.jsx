@@ -106,7 +106,7 @@ function StudentOTP() {
       >
         <div className="otp-logo">
           <span>🎓</span>
-          <strong>LERNIQ</strong>
+          <strong>EDVIKO</strong>
         </div>
 
         <div className="otp-visual-content">
@@ -121,7 +121,7 @@ function StudentOTP() {
           <p>
             Verify your email to keep your
             <br />
-            LERNIQ account secure and personalized.
+            EDVIKO account secure and personalized.
           </p>
         </div>
 

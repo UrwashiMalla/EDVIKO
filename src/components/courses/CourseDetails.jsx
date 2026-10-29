@@ -23,7 +23,7 @@ function CourseDetails({ course, onBack, onStartLearning }) {
           messages: [
             {
               role: "system",
-              content: "You are an expert AI tutor for LERNIQ. Explain the topic in a simple, engaging way with a quick summary and a mini quiz."
+              content: "You are an expert AI tutor for EDVIKO. Explain the topic in a simple, engaging way with a quick summary and a mini quiz."
             },
             {
               role: "user",
@@ -744,7 +744,7 @@ function CourseDetails({ course, onBack, onStartLearning }) {
           <span>AI-POWERED STUDY</span>
 
           <h2>
-            Learn faster with LERNIQ
+            Learn faster with EDVIKO
           </h2>
 
           <p>

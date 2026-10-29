@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { aiApi } from "../services/api";
 import { useToast } from "../context/useToast";
+import { isNonStudyQuery, getAcademicRefusalMessage } from "../utils/academicGuardrail";
 import "./AITutor.css";
 
 /**
@@ -165,6 +166,22 @@ function AITutor({ onBack, language = "English", onLanguageChange, text = "", do
       },
     ]);
 
+    // Academic Study-Only Guardrail Check
+    if (isNonStudyQuery(userQuestion)) {
+      setTimeout(() => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: getAcademicRefusalMessage(activeLanguage),
+            language: activeLanguage,
+          },
+        ]);
+        setLoading(false);
+      }, 250);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -247,7 +264,7 @@ function AITutor({ onBack, language = "English", onLanguageChange, text = "", do
         <div className="ai-tutor-title">
           <span className="ai-tutor-title-icon">💬</span>
           <div>
-            <h1>LERNIQ AI Tutor ({activeLanguage})</h1>
+            <h1>EDVIKO AI Tutor ({activeLanguage})</h1>
             <p>Interactive study tutor constrained strictly to your document</p>
           </div>
         </div>
@@ -286,7 +303,7 @@ function AITutor({ onBack, language = "English", onLanguageChange, text = "", do
             animate={{ opacity: 1, y: 0 }}
           >
             <div className="ai-tutor-welcome-icon">🤖</div>
-            <h2>Hi! I'm your LERNIQ AI Tutor</h2>
+            <h2>Hi! I'm your EDVIKO AI Tutor</h2>
             <p>
               Ask me anything about your uploaded study material. I explain concepts simply and accurately based strictly on your document.
             </p>
@@ -336,7 +353,7 @@ function AITutor({ onBack, language = "English", onLanguageChange, text = "", do
 
                 <div className="message-content">
                   <span className="message-name">
-                    {message.role === "user" ? "You" : `LERNIQ AI Tutor (${message.language || activeLanguage})`}
+                    {message.role === "user" ? "You" : `EDVIKO AI Tutor (${message.language || activeLanguage})`}
                   </span>
                   <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
                     {message.content}
@@ -353,7 +370,7 @@ function AITutor({ onBack, language = "English", onLanguageChange, text = "", do
               >
                 <div className="message-avatar">🤖</div>
                 <div className="message-content">
-                  <span className="message-name">LERNIQ AI Tutor ({activeLanguage})</span>
+                  <span className="message-name">EDVIKO AI Tutor ({activeLanguage})</span>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
                     <span style={{ fontSize: "14px", color: "#6b21a8", fontWeight: "500" }}>
                       Analyzing document & thinking...

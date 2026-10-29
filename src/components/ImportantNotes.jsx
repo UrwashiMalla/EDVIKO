@@ -160,7 +160,7 @@ function ImportantNotes({ onBack, language = "English", onLanguageChange, text =
         <div>
           <h2>Study smarter with structured notes</h2>
           <p>
-            LERNIQ extracts essential definitions, formulas, and concepts tailored for exams.
+            EDVIKO extracts essential definitions, formulas, and concepts tailored for exams.
           </p>
         </div>
       </motion.div>

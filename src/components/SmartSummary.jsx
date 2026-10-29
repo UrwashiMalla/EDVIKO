@@ -138,7 +138,7 @@ function SmartSummary({ onBack, language = "English", onLanguageChange, text = "
         <div>
           <h2>Understand faster with AI</h2>
           <p>
-            LERNIQ extracts the most important core ideas and structures them for quick comprehension.
+            EDVIKO extracts the most important core ideas and structures them for quick comprehension.
           </p>
         </div>
       </motion.div>

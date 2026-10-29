@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/useAuth";
 import { teacherApi } from "../services/api";
+import { getDirectMessages, sendDirectMessage } from "../services/frontendStorage";
 import Navbar from "./Navbar";
 
 function TeacherStudentDetail() {
+  const { user } = useAuth();
   const { studentId, id } = useParams();
   const effectiveStudentId = studentId || id;
   const navigate = useNavigate();
@@ -11,6 +14,17 @@ function TeacherStudentDetail() {
   const [studentData, setStudentData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // DM Modal
+  const [showDM, setShowDM] = useState(false);
+  const [dmMessages, setDmMessages] = useState([]);
+  const [dmInput, setDmInput] = useState("");
+  const [toast, setToast] = useState("");
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 3500);
+  };
 
   useEffect(() => {
     let ignore = false;
@@ -35,6 +49,28 @@ function TeacherStudentDetail() {
       ignore = true;
     };
   }, [effectiveStudentId]);
+
+  const handleOpenDM = () => {
+    setDmMessages(getDirectMessages(effectiveStudentId));
+    setShowDM(true);
+  };
+
+  const handleSendDM = (e) => {
+    e.preventDefault();
+    if (!dmInput.trim()) return;
+
+    const studentName = studentData?.student?.name || "Student";
+    const updated = sendDirectMessage(effectiveStudentId, {
+      senderRole: "teacher",
+      senderName: user?.name || "Prof. Sarah Jenkins",
+      text: dmInput.trim(),
+      studentName,
+    });
+
+    setDmMessages(updated);
+    setDmInput("");
+    showToast(`Personal message delivered to ${studentName}!`);
+  };
 
   if (loading) {
     return (
@@ -71,6 +107,31 @@ function TeacherStudentDetail() {
   return (
     <div style={{ minHeight: "100vh", background: "#faf9ff" }}>
       <Navbar activeTab="students" />
+
+      {/* Toast Notice */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "24px",
+            right: "24px",
+            background: "#1e1b4b",
+            color: "#fff",
+            padding: "14px 24px",
+            borderRadius: "14px",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+            zIndex: 10000,
+            fontSize: "14px",
+            fontWeight: "600",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+          }}
+        >
+          <span>✨</span>
+          <span>{toast}</span>
+        </div>
+      )}
 
       <main style={{ maxWidth: "1200px", margin: "40px auto", padding: "0 24px" }}>
         {/* Header Breadcrumbs */}
@@ -123,7 +184,7 @@ function TeacherStudentDetail() {
                 {student.name}
               </h1>
               <div style={{ color: "#6b7280", fontSize: "14px", marginTop: "4px" }}>
-                {student.email} • {student.gradeOrClass}
+                {student.email} • {student.gradeOrClass || "Enrolled Student"}
               </div>
               <div style={{ fontSize: "12px", color: "#9ca3af", marginTop: "4px" }}>
                 Joined: {new Date(student.createdAt).toLocaleDateString()}
@@ -131,7 +192,7 @@ function TeacherStudentDetail() {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
             <div style={{ textAlign: "center", padding: "12px 20px", background: "#fbfaff", borderRadius: "12px", border: "1px solid #ede9fe" }}>
               <div style={{ fontSize: "12px", color: "#6b7280", fontWeight: "600" }}>DOCUMENTS</div>
               <div style={{ fontSize: "24px", fontWeight: "800", color: "#4c1d95" }}>{stats.totalDocuments}</div>
@@ -148,6 +209,26 @@ function TeacherStudentDetail() {
                 {stats.averageScore}%
               </div>
             </div>
+
+            <button
+              onClick={handleOpenDM}
+              style={{
+                padding: "12px 20px",
+                background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "12px",
+                fontWeight: "700",
+                fontSize: "13px",
+                cursor: "pointer",
+                boxShadow: "0 4px 14px rgba(124, 58, 237, 0.3)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <span>💬 Message Personally</span>
+            </button>
           </div>
         </div>
 
@@ -160,7 +241,9 @@ function TeacherStudentDetail() {
             </h2>
 
             {documents.length === 0 ? (
-              <p style={{ color: "#9ca3af", fontSize: "14px" }}>No documents uploaded yet by this student.</p>
+              <div style={{ textAlign: "center", padding: "30px 0", color: "#9ca3af" }}>
+                No documents uploaded yet by this student.
+              </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 {documents.map((doc) => (
@@ -168,32 +251,16 @@ function TeacherStudentDetail() {
                     key={doc.id}
                     style={{
                       padding: "16px",
-                      background: "#faf5ff",
+                      background: "#fbfaff",
                       borderRadius: "14px",
                       border: "1px solid #f3e8ff",
                     }}
                   >
-                    <strong style={{ fontSize: "15px", color: "#4c1d95" }}>{doc.title}</strong>
-                    <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>
-                      {doc.originalFileName} • {doc.wordCount} words • Uploaded {new Date(doc.uploadDate).toLocaleDateString()}
+                    <div style={{ fontWeight: "700", color: "#1f2937", fontSize: "15px" }}>
+                      {doc.title}
                     </div>
-
-                    <div style={{ display: "flex", gap: "6px", marginTop: "10px" }}>
-                      {doc.hasSummary && (
-                        <span style={{ fontSize: "10px", fontWeight: "600", background: "#ede9fe", color: "#6d28d9", padding: "2px 6px", borderRadius: "4px" }}>
-                          ✓ Summary
-                        </span>
-                      )}
-                      {doc.hasNotes && (
-                        <span style={{ fontSize: "10px", fontWeight: "600", background: "#ede9fe", color: "#6d28d9", padding: "2px 6px", borderRadius: "4px" }}>
-                          ✓ Notes
-                        </span>
-                      )}
-                      {doc.hasQuestions && (
-                        <span style={{ fontSize: "10px", fontWeight: "600", background: "#ede9fe", color: "#6d28d9", padding: "2px 6px", borderRadius: "4px" }}>
-                          ✓ Questions
-                        </span>
-                      )}
+                    <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>
+                      {doc.wordCount} words • Uploaded on {new Date(doc.createdAt).toLocaleDateString()}
                     </div>
                   </div>
                 ))}
@@ -201,14 +268,16 @@ function TeacherStudentDetail() {
             )}
           </section>
 
-          {/* QUIZ EVALUATIONS */}
+          {/* QUIZ RESULTS */}
           <section style={{ background: "#fff", borderRadius: "20px", padding: "28px", border: "1px solid #f3e8ff", boxShadow: "0 4px 15px rgba(0,0,0,0.03)" }}>
             <h2 style={{ fontSize: "19px", fontWeight: "800", color: "#1f2937", marginBottom: "16px" }}>
-              Quiz Performance & Attempts ({quizResults.length})
+              Quiz Attempts ({quizResults.length})
             </h2>
 
             {quizResults.length === 0 ? (
-              <p style={{ color: "#9ca3af", fontSize: "14px" }}>No quiz evaluations recorded yet.</p>
+              <div style={{ textAlign: "center", padding: "30px 0", color: "#9ca3af" }}>
+                No quiz submissions recorded yet for this student.
+              </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 {quizResults.map((q) => (
@@ -216,16 +285,18 @@ function TeacherStudentDetail() {
                     key={q.id}
                     style={{
                       padding: "16px",
-                      background: "#f0fdf4",
+                      background: "#fbfaff",
                       borderRadius: "14px",
-                      border: "1px solid #dcfce7",
+                      border: "1px solid #f3e8ff",
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
                     }}
                   >
                     <div>
-                      <strong style={{ fontSize: "14px", color: "#065f46" }}>{q.documentTitle}</strong>
+                      <div style={{ fontWeight: "700", color: "#1f2937", fontSize: "14px" }}>
+                        {q.documentTitle}
+                      </div>
                       <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "2px" }}>
                         Completed on {new Date(q.completedAt).toLocaleDateString()}
                       </div>
@@ -249,6 +320,135 @@ function TeacherStudentDetail() {
           </section>
         </div>
       </main>
+
+      {/* ================= MODAL: DIRECT PERSONAL MESSAGE ================= */}
+      {showDM && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(15, 23, 42, 0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+          onClick={() => setShowDM(false)}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "24px",
+              maxWidth: "640px",
+              width: "100%",
+              overflow: "hidden",
+              boxShadow: "0 25px 50px rgba(0,0,0,0.25)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ padding: "24px", background: "linear-gradient(135deg, #4c1d95, #6d28d9)", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "1px", background: "rgba(255,255,255,0.2)", padding: "3px 8px", borderRadius: "6px" }}>
+                  DIRECT PERSONAL MESSAGE
+                </span>
+                <h2 style={{ fontSize: "20px", fontWeight: "800", margin: "4px 0 2px 0" }}>
+                  {student.name}
+                </h2>
+                <div style={{ fontSize: "12px", opacity: 0.85 }}>{student.email}</div>
+              </div>
+              <button
+                onClick={() => setShowDM(false)}
+                style={{
+                  background: "rgba(255, 255, 255, 0.2)",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: "36px",
+                  height: "36px",
+                  fontSize: "16px",
+                  cursor: "pointer",
+                  color: "#fff",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Conversation Feed */}
+            <div style={{ padding: "20px", maxHeight: "300px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px", background: "#faf9ff" }}>
+              {dmMessages.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "30px", color: "#94a3b8", fontSize: "14px" }}>
+                  No previous messages with {student.name}. Send your message below.
+                </div>
+              ) : (
+                dmMessages.map((msg) => {
+                  const isFaculty = msg.senderRole === "teacher";
+                  return (
+                    <div
+                      key={msg.id}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: isFaculty ? "flex-end" : "flex-start",
+                      }}
+                    >
+                      <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "3px" }}>
+                        {isFaculty ? "You (Faculty)" : msg.senderName} • {msg.timestamp}
+                      </div>
+                      <div
+                        style={{
+                          maxWidth: "80%",
+                          padding: "10px 16px",
+                          borderRadius: isFaculty ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
+                          background: isFaculty ? "#6d28d9" : "#ffffff",
+                          color: isFaculty ? "#ffffff" : "#1e293b",
+                          fontSize: "13px",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                          border: isFaculty ? "none" : "1px solid #e2e8f0",
+                        }}
+                      >
+                        {msg.text}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Send Input */}
+            <form onSubmit={handleSendDM} style={{ padding: "16px 20px", background: "#fff", borderTop: "1px solid #f1f5f9", display: "flex", gap: "10px" }}>
+              <input
+                type="text"
+                placeholder={`Write private message to ${student.name}...`}
+                value={dmInput}
+                onChange={(e) => setDmInput(e.target.value)}
+                style={{ flex: 1, padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "13px" }}
+              />
+              <button
+                type="submit"
+                disabled={!dmInput.trim()}
+                style={{
+                  padding: "12px 22px",
+                  background: dmInput.trim() ? "#6d28d9" : "#e2e8f0",
+                  color: dmInput.trim() ? "#fff" : "#94a3b8",
+                  border: "none",
+                  borderRadius: "10px",
+                  fontSize: "13px",
+                  fontWeight: "700",
+                  cursor: dmInput.trim() ? "pointer" : "default",
+                }}
+              >
+                Send Message
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

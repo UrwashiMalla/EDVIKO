@@ -1,0 +1,309 @@
+/**
+ * mobileResponsive.css
+ * Mobile-only optimizations for EDVIKO.
+ * ALL visual mobile adaptations are strictly scoped inside @media (max-width: 900px) and @media (max-width: 600px).
+ * Desktop view (screens > 900px) remains 100% UNCHANGED and untouched.
+ */
+
+/* ===================================================
+   DESKTOP DEFAULT HIDING (Screens > 900px)
+   Keeps Desktop View 100% Clean and Unaltered
+   =================================================== */
+.mobile-nav-toggle {
+  display: none;
+}
+
+.mobile-nav-drawer {
+  display: none;
+}
+
+.mobile-drawer-backdrop {
+  display: none;
+}
+
+/* ===================================================
+   TABLET & MOBILE SCREENS (max-width: 900px)
+   =================================================== */
+@media (max-width: 900px) {
+  /* Show Mobile Menu Toggle */
+  .mobile-nav-toggle {
+    display: flex !important;
+  }
+
+  /* Backdrop for Mobile Drawer */
+  .mobile-drawer-backdrop {
+    display: block !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+    z-index: 9998;
+  }
+
+  /* Mobile Navigation Dropdown Drawer */
+  .mobile-nav-drawer {
+    display: block !important;
+    position: fixed;
+    top: 74px;
+    left: 12px;
+    right: 12px;
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(76, 29, 149, 0.18);
+    border: 1px solid #ede9fe;
+    padding: 18px;
+    z-index: 9999;
+    animation: mobileSlideDown 0.25s ease-out forwards;
+  }
+
+  @keyframes mobileSlideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .mobile-nav-link {
+    display: flex !important;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    margin-bottom: 6px;
+    border-radius: 12px;
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 700;
+    color: #475569;
+    background: #f8fafc;
+    transition: all 0.2s ease;
+  }
+
+  .mobile-nav-link.active {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(109, 40, 217, 0.25);
+  }
+
+  .mobile-nav-link:hover {
+    color: #6d28d9;
+    background: #ede9fe;
+  }
+
+  .mobile-nav-link.active:hover {
+    color: #ffffff;
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  }
+
+  /* Mobile Header Adjustments */
+  .dashboard-navbar {
+    width: calc(100% - 24px) !important;
+    margin-left: 12px !important;
+    margin-right: 12px !important;
+    padding: 0 16px !important;
+  }
+
+  .dashboard-actions .student-profile {
+    padding: 4px 8px !important;
+  }
+
+  /* Page Containers on Mobile */
+  main {
+    max-width: 100% !important;
+    margin: 20px auto !important;
+    padding: 0 14px !important;
+  }
+
+  /* Faculty Overview Banner */
+  .faculty-banner,
+  div[style*="linear-gradient(135deg, rgb(76, 29, 149)"] {
+    padding: 24px 18px !important;
+    border-radius: 20px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 18px !important;
+  }
+
+  /* Mobile Banner Buttons */
+  div[style*="display: flex; flex-direction: column; gap: 10px; min-width: 200px;"],
+  div[style*="display: flex; flex-direction: column; gap: 12px; min-width: 190px;"] {
+    width: 100% !important;
+    min-width: unset !important;
+  }
+
+  /* Full-width touch friendly buttons in banners */
+  div[style*="display: flex; flex-direction: column;"] > button {
+    width: 100% !important;
+    padding: 13px 20px !important;
+  }
+
+  /* Student Dashboard Hero Action Buttons */
+  div[style*="display: flex; gap: 10px; flex-wrap: wrap;"] {
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 10px !important;
+  }
+
+  div[style*="display: flex; gap: 10px; flex-wrap: wrap;"] > button {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 14px 20px !important;
+    font-size: 14px !important;
+  }
+
+  /* Touch-friendly Horizontal Table Scrolling */
+  div[style*="overflow-x: auto;"],
+  div[style*="overflowX: auto;"],
+  div[style*="overflow-x: auto"],
+  div[style*="overflowX: auto"],
+  div[style*="overflowX: \"auto\""] {
+    -webkit-overflow-scrolling: touch !important;
+    width: 100% !important;
+    border-radius: 14px !important;
+    padding-bottom: 8px !important;
+  }
+
+  table {
+    min-width: 600px !important;
+  }
+
+  /* Modals on Mobile */
+  div[style*="position: fixed;"][style*="z-index: 9999"],
+  div[style*="position: fixed;"][style*="zIndex: 9999"],
+  div[style*="zIndex: 99999"],
+  div[style*="z-index: 99999"] {
+    padding: 10px !important;
+    align-items: flex-end !important;
+  }
+
+  div[style*="maxWidth: \"760px\""],
+  div[style*="maxWidth: \"680px\""],
+  div[style*="maxWidth: \"640px\""],
+  div[style*="maxWidth: \"580px\""],
+  div[style*="maxWidth: \"540px\""],
+  div[style*="maxWidth: \"500px\""],
+  div[style*="max-width: 760px"],
+  div[style*="max-width: 680px"],
+  div[style*="max-width: 640px"],
+  div[style*="max-width: 580px"],
+  div[style*="max-width: 540px"],
+  div[style*="max-width: 500px"] {
+    max-width: 100% !important;
+    width: 100% !important;
+    max-height: 90vh !important;
+    padding: 20px 16px !important;
+    border-radius: 20px !important;
+    margin: 0 !important;
+  }
+
+  /* Form Column Stacks for mobile */
+  div[style*="grid-template-columns: 2fr 1fr 1fr"],
+  div[style*="gridTemplateColumns: \"2fr 1fr 1fr\""],
+  div[style*="gridTemplateColumns: \"2fr 1fr 1fr 1fr\""],
+  div[style*="grid-template-columns: 2fr 1fr 1fr 1fr"],
+  div[style*="gridTemplateColumns: \"1fr 140px 140px\""],
+  div[style*="grid-template-columns: 1fr 140px 140px"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  div[style*="gridTemplateColumns: \"1fr 1fr\""],
+  div[style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Content Hub Tab Navigation Pill Bar on Mobile */
+  div[style*="borderBottom: \"2px solid #f1f5f9\""],
+  div[style*="border-bottom: 2px solid #f1f5f9"] {
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 8px !important;
+    gap: 8px !important;
+    scrollbar-width: none !important;
+  }
+
+  div[style*="borderBottom: \"2px solid #f1f5f9\""]::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  div[style*="borderBottom: \"2px solid #f1f5f9\""] > button {
+    flex-shrink: 0 !important;
+    padding: 8px 16px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* ===================================================
+   SMARTPHONES (max-width: 600px)
+   =================================================== */
+@media (max-width: 600px) {
+  /* Student Dashboard Hero on Small Screens */
+  .dashboard-hero {
+    padding: 24px 16px !important;
+    min-height: auto !important;
+  }
+
+  .hero-content h1 {
+    font-size: 34px !important;
+    line-height: 1.2 !important;
+  }
+
+  .hero-description {
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+  }
+
+  .hero-student {
+    margin-top: 15px !important;
+  }
+
+  .dashboard-student-image {
+    width: 240px !important;
+    height: auto !important;
+  }
+
+  .hero-quote {
+    display: none !important; /* Hide background quote card to avoid clutter on mobile */
+  }
+
+  /* Stat cards on small phones */
+  div[style*="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr))"],
+  div[style*="gridTemplateColumns: \"repeat(auto-fit, minmax(260px, 1fr))\""],
+  div[style*="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))"],
+  div[style*="gridTemplateColumns: \"repeat(auto-fit, minmax(280px, 1fr))\""],
+  div[style*="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr))"],
+  div[style*="gridTemplateColumns: \"repeat(auto-fit, minmax(240px, 1fr))\""] {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  /* Typography */
+  h1 {
+    font-size: 24px !important;
+  }
+
+  h2 {
+    font-size: 18px !important;
+  }
+
+  /* Chatbot layout on small screens */
+  .chatbot-container {
+    padding: 10px !important;
+    height: calc(100vh - 80px) !important;
+  }
+
+  .chat-messages-container {
+    padding: 12px !important;
+  }
+
+  .chat-input-bar {
+    padding: 8px 12px !important;
+  }
+}

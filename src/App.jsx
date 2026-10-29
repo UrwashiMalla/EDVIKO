@@ -13,7 +13,8 @@ import StudentDocuments from "./components/StudentDocuments";
 import AILearningResults from "./components/AILearningResults";
 import SmartMCQQuiz from "./components/SmartMCQQuiz";
 import StudentProfile from "./components/StudentProfile";
-import Courses from "./components/courses/Courses";
+import LecturesNotes from "./components/LecturesNotes";
+import AIChatbot from "./components/AIChatbot";
 
 import TeacherLogin from "./components/TeacherLogin";
 import TeacherDashboard from "./components/TeacherDashboard";
@@ -23,6 +24,7 @@ import TeacherDocuments from "./components/TeacherDocuments";
 import TeacherQuizResults from "./components/TeacherQuizResults";
 
 import "./App.css";
+import "./styles/mobileResponsive.css";
 
 function App() {
   return (
@@ -93,6 +95,44 @@ function App() {
             }
           />
 
+          <Route
+            path="/student/lectures-notes"
+            element={
+              <ProtectedRoute role="student">
+                <LecturesNotes />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Backwards compatibility for courses */}
+          <Route
+            path="/student/courses"
+            element={
+              <ProtectedRoute role="student">
+                <LecturesNotes />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* AI Chatbot where students can talk */}
+          <Route
+            path="/student/chat"
+            element={
+              <ProtectedRoute role="student">
+                <AIChatbot />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/student/ai-chat"
+            element={
+              <ProtectedRoute role="student">
+                <AIChatbot />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Teacher Auth */}
           <Route path="/teacher/login" element={<TeacherLogin />} />
 
@@ -147,15 +187,6 @@ function App() {
             element={
               <ProtectedRoute role="teacher">
                 <TeacherQuizResults />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/student/courses"
-            element={
-              <ProtectedRoute role="student">
-                <Courses />
               </ProtectedRoute>
             }
           />

@@ -2,19 +2,27 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "../context/useAuth";
 import { studentApi } from "../services/api";
+import { getInstitutionName } from "../services/frontendStorage";
 import Navbar from "./Navbar";
 
 function StudentProfile() {
-  const { user, refreshUser } = useAuth();
+  const { user, updateUser, refreshUser } = useAuth();
 
+  const [studentName, setStudentName] = useState(user?.name || "");
   const [gradeOrClass, setGradeOrClass] = useState("");
-  const [bio, setBio] = useState("");
   const [teacherCode, setTeacherCode] = useState("");
   const [teacherInfo, setTeacherInfo] = useState(null);
+  const [institutionName, setInstitutionName] = useState(getInstitutionName());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (user?.name) {
+      setStudentName(user.name);
+    }
+  }, [user]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -22,7 +30,6 @@ function StudentProfile() {
         const res = await studentApi.getDashboard();
         if (res.profile) {
           setGradeOrClass(res.profile.gradeOrClass || "College / University");
-          setBio(res.profile.bio || "");
           if (res.profile.teacherId) {
             setTeacherInfo(res.profile.teacherId);
           }
@@ -35,6 +42,7 @@ function StudentProfile() {
     };
 
     fetchProfile();
+    setInstitutionName(getInstitutionName());
   }, []);
 
   const handleSave = async (e) => {
@@ -44,13 +52,18 @@ function StudentProfile() {
     setError("");
 
     try {
+      // 1. Update student name in frontend auth state & local cache
+      if (studentName.trim() && updateUser) {
+        updateUser({ name: studentName.trim() });
+      }
+
+      // 2. Call backend profile update
       const res = await studentApi.updateProfile({
         gradeOrClass,
-        bio,
         teacherCode: teacherCode.trim() || undefined,
       });
 
-      setMessage("Profile updated successfully!");
+      setMessage("Profile and name updated successfully!");
       if (res.profile?.teacherId) {
         setTeacherInfo(res.profile.teacherId);
       }
@@ -83,7 +96,7 @@ function StudentProfile() {
           Student Profile
         </h1>
         <p style={{ color: "#6b7280", marginBottom: "30px", fontSize: "15px" }}>
-          Manage your personal learning profile and assigned faculty mentor.
+          Manage your student name, personal learning profile, and assigned faculty mentor.
         </p>
 
         {message && (
@@ -115,11 +128,11 @@ function StudentProfile() {
                 fontWeight: "bold",
               }}
             >
-              {user?.name?.charAt(0).toUpperCase() || "S"}
+              {studentName?.charAt(0).toUpperCase() || "S"}
             </div>
 
             <div>
-              <h2 style={{ margin: 0, fontSize: "22px", color: "#1f2937" }}>{user?.name}</h2>
+              <h2 style={{ margin: 0, fontSize: "22px", color: "#1f2937" }}>{studentName || user?.name}</h2>
               <div style={{ color: "#6b7280", fontSize: "14px", marginTop: "4px" }}>{user?.email}</div>
               <span style={{ display: "inline-block", marginTop: "8px", fontSize: "12px", fontWeight: 600, background: "#ede9fe", color: "#6d28d9", padding: "3px 10px", borderRadius: "6px" }}>
                 Role: Student {user?.isVerified ? "• Verified" : ""}
@@ -127,17 +140,40 @@ function StudentProfile() {
             </div>
           </div>
 
+          {/* Institutional Affiliation (Configured by Teacher - Read Only for Students) */}
+          <div style={{ background: "#f8fafc", padding: "18px 20px", borderRadius: "14px", border: "1px solid #e2e8f0", marginBottom: "24px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+              <div>
+                <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "1px", color: "#64748b" }}>
+                  AFFILIATED INSTITUTION
+                </span>
+                <div style={{ fontSize: "18px", fontWeight: "800", color: "#1e293b", marginTop: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>🏛️</span>
+                  <span>{institutionName}</span>
+                </div>
+              </div>
+              <span style={{ fontSize: "12px", background: "#f1f5f9", color: "#475569", padding: "4px 10px", borderRadius: "6px", fontWeight: "600", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                🔒 Set by Faculty Mentor (Read-Only)
+              </span>
+            </div>
+            <p style={{ margin: "8px 0 0 0", fontSize: "12px", color: "#64748b" }}>
+              Your university/college affiliation is configured by your faculty supervisor and cannot be altered by students.
+            </p>
+          </div>
+
           {/* Form */}
           <form onSubmit={handleSave}>
+            {/* Student Name Block */}
             <div style={{ marginBottom: "20px" }}>
               <label style={{ display: "block", fontSize: "14px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
-                Academic Level / Course
+                Student Full Name
               </label>
               <input
                 type="text"
-                value={gradeOrClass}
-                onChange={(e) => setGradeOrClass(e.target.value)}
-                placeholder="e.g. B.Tech Computer Science / Grade 12"
+                value={studentName}
+                onChange={(e) => setStudentName(e.target.value)}
+                placeholder="Enter your student full name"
+                required
                 style={{
                   width: "100%",
                   padding: "12px 16px",
@@ -147,17 +183,20 @@ function StudentProfile() {
                   boxSizing: "border-box",
                 }}
               />
+              <small style={{ color: "#6b7280", fontSize: "12px", display: "block", marginTop: "4px" }}>
+                You can change your displayed student name at any time.
+              </small>
             </div>
 
-            <div style={{ marginBottom: "20px" }}>
+            <div style={{ marginBottom: "24px" }}>
               <label style={{ display: "block", fontSize: "14px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
-                Learning Bio / Goals
+                Academic Level / Course
               </label>
-              <textarea
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                rows="3"
-                placeholder="Tell us what you are currently studying or preparing for..."
+              <input
+                type="text"
+                value={gradeOrClass}
+                onChange={(e) => setGradeOrClass(e.target.value)}
+                placeholder="e.g. B.Tech Computer Science / Grade 12"
                 style={{
                   width: "100%",
                   padding: "12px 16px",
@@ -198,7 +237,6 @@ function StudentProfile() {
                     border: "1px solid #d8b4fe",
                     fontSize: "13px",
                     boxSizing: "border-box",
-                    textTransform: "uppercase",
                   }}
                 />
               </div>
@@ -210,17 +248,19 @@ function StudentProfile() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               style={{
-                padding: "12px 28px",
-                background: "#7c3aed",
+                width: "100%",
+                padding: "12px",
+                background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
                 color: "#fff",
                 border: "none",
                 borderRadius: "12px",
-                fontWeight: "600",
                 fontSize: "15px",
+                fontWeight: "600",
                 cursor: "pointer",
+                boxShadow: "0 4px 15px rgba(124, 58, 237, 0.3)",
               }}
             >
-              {saving ? "Saving Changes..." : "Save Profile"}
+              {saving ? "Saving..." : "Save Changes"}
             </motion.button>
           </form>
         </div>
