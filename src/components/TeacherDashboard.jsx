@@ -15,6 +15,7 @@ import {
   getUploadedNotes,
   uploadNote,
   DEFAULT_STUDENTS_LIST,
+  getRemovedStudentIds,
 } from "../services/frontendStorage";
 import Navbar from "./Navbar";
 
@@ -69,7 +70,11 @@ function TeacherDashboard() {
           teacherApi.getStudents(),
         ]);
         setDashboardData(dashRes);
-        setStudents(studentsRes.students || []);
+        const removedIds = getRemovedStudentIds();
+        const activeStudentsList = (studentsRes.students || []).filter(
+          (s) => !removedIds.includes(String(s.id))
+        );
+        setStudents(activeStudentsList);
       } catch (err) {
         console.error("Teacher Dashboard Error:", err);
         setError(err.message || "Failed to load faculty dashboard.");
@@ -132,10 +137,13 @@ function TeacherDashboard() {
 
   // Merge students roster for personal messaging selector
   const availableStudentsForDM = (() => {
-    const combined = [...students];
+    const removedIds = getRemovedStudentIds();
+    const combined = [...students].filter((s) => !removedIds.includes(String(s.id)));
     const ids = new Set(combined.map((s) => s.id));
     DEFAULT_STUDENTS_LIST.forEach((s) => {
-      if (!ids.has(s.id)) combined.push(s);
+      if (!ids.has(s.id) && !removedIds.includes(String(s.id))) {
+        combined.push(s);
+      }
     });
     return combined;
   })();

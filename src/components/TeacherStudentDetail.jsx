@@ -2,7 +2,13 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { teacherApi } from "../services/api";
-import { getDirectMessages, sendDirectMessage } from "../services/frontendStorage";
+import {
+  getDirectMessages,
+  sendDirectMessage,
+  getRemovedStudentIds,
+  addRemovedStudentId,
+  restoreRemovedStudentId,
+} from "../services/frontendStorage";
 import Navbar from "./Navbar";
 
 function TeacherStudentDetail() {
@@ -20,6 +26,27 @@ function TeacherStudentDetail() {
   const [dmMessages, setDmMessages] = useState([]);
   const [dmInput, setDmInput] = useState("");
   const [toast, setToast] = useState("");
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [isRemoved, setIsRemoved] = useState(() => {
+    const list = getRemovedStudentIds();
+    return list.includes(String(effectiveStudentId));
+  });
+
+  const handleConfirmRemove = () => {
+    addRemovedStudentId(effectiveStudentId);
+    setIsRemoved(true);
+    setShowRemoveConfirm(false);
+    showToast(`Removed ${studentData?.student?.name || "student"} from active roster.`);
+    setTimeout(() => {
+      navigate("/teacher/students");
+    }, 1200);
+  };
+
+  const handleRestore = () => {
+    restoreRemovedStudentId(effectiveStudentId);
+    setIsRemoved(false);
+    showToast(`Restored ${studentData?.student?.name || "student"} back to active roster!`);
+  };
 
   const showToast = (msg) => {
     setToast(msg);
@@ -229,6 +256,46 @@ function TeacherStudentDetail() {
             >
               <span>💬 Message Personally</span>
             </button>
+
+            {isRemoved ? (
+              <button
+                onClick={handleRestore}
+                style={{
+                  padding: "12px 20px",
+                  background: "#dcfce7",
+                  color: "#15803d",
+                  border: "1px solid #bbf7d0",
+                  borderRadius: "12px",
+                  fontWeight: "700",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <span>↩ Restore Student</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowRemoveConfirm(true)}
+                style={{
+                  padding: "12px 18px",
+                  background: "#fee2e2",
+                  color: "#dc2626",
+                  border: "1px solid #fecaca",
+                  borderRadius: "12px",
+                  fontWeight: "700",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <span>🗑️ Remove Student</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -446,6 +513,131 @@ function TeacherStudentDetail() {
                 Send Message
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: CONFIRM REMOVE STUDENT ================= */}
+      {showRemoveConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+          onClick={() => setShowRemoveConfirm(false)}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "20px",
+              maxWidth: "480px",
+              width: "100%",
+              padding: "28px",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              border: "1px solid #fee2e2",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "16px" }}>
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  background: "#fee2e2",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "22px",
+                  flexShrink: 0,
+                }}
+              >
+                🗑️
+              </div>
+              <div>
+                <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#1f2937", margin: 0 }}>
+                  Remove Student
+                </h2>
+                <span style={{ fontSize: "13px", color: "#6b7280" }}>
+                  Confirm removal from active roster
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: "14px", color: "#4b5563", lineHeight: 1.6, margin: "0 0 16px 0" }}>
+              Are you sure you want to remove <strong>{student.name}</strong> ({student.email}) from your assigned students roster?
+            </p>
+
+            <div
+              style={{
+                background: "#fef3c7",
+                border: "1px solid #fde68a",
+                borderRadius: "12px",
+                padding: "12px 16px",
+                fontSize: "13px",
+                color: "#92400e",
+                marginBottom: "24px",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "8px",
+                lineHeight: 1.5,
+              }}
+            >
+              <span>💡</span>
+              <span>
+                You will be redirected back to the My Students page. You can restore this student anytime from the Removed Students list.
+              </span>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => setShowRemoveConfirm(false)}
+                style={{
+                  padding: "10px 18px",
+                  background: "#f3f4f6",
+                  color: "#374151",
+                  border: "none",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemove}
+                style={{
+                  padding: "10px 20px",
+                  background: "#dc2626",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 12px rgba(220, 38, 38, 0.25)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <span>🗑️</span>
+                <span>Yes, Remove Student</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

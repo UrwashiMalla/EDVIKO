@@ -16,6 +16,7 @@ const STORAGE_KEYS = {
   NOTES: "lerniq_uploaded_notes",
   LECTURES: "lerniq_uploaded_lectures",
   QUIZZES: "lerniq_conducted_quizzes",
+  REMOVED_STUDENTS: "lerniq_removed_students",
 };
 
 // Default institution
@@ -51,6 +52,43 @@ export const DEFAULT_STUDENTS_LIST = [
   { id: "std_107", name: "Sophia Miller", email: "sophia.m@lerniq.edu", studentId: "std_107" },
   { id: "std_108", name: "Hassan Ali", email: "hassan.a@lerniq.edu", studentId: "std_108" },
 ];
+
+// ==========================================
+// REMOVED STUDENTS PERSISTENCE (FRONTEND-ONLY)
+// ==========================================
+export const getRemovedStudentIds = () => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.REMOVED_STUDENTS);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const addRemovedStudentId = (studentId) => {
+  if (!studentId) return getRemovedStudentIds();
+  const current = getRemovedStudentIds();
+  const idStr = String(studentId);
+  if (!current.includes(idStr)) {
+    const updated = [...current, idStr];
+    localStorage.setItem(STORAGE_KEYS.REMOVED_STUDENTS, JSON.stringify(updated));
+    return updated;
+  }
+  return current;
+};
+
+export const restoreRemovedStudentId = (studentId) => {
+  const current = getRemovedStudentIds();
+  const idStr = String(studentId);
+  const updated = current.filter((id) => id !== idStr);
+  localStorage.setItem(STORAGE_KEYS.REMOVED_STUDENTS, JSON.stringify(updated));
+  return updated;
+};
+
+export const restoreAllRemovedStudents = () => {
+  localStorage.removeItem(STORAGE_KEYS.REMOVED_STUDENTS);
+  return [];
+};
 
 // ==========================================
 // TEACHER BROADCAST MESSAGES / ANNOUNCEMENTS

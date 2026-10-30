@@ -6,15 +6,26 @@ import {
   getDirectMessages,
   sendDirectMessage,
   DEFAULT_STUDENTS_LIST,
+  getRemovedStudentIds,
+  addRemovedStudentId,
+  restoreRemovedStudentId,
+  restoreAllRemovedStudents,
 } from "../services/frontendStorage";
 import Navbar from "./Navbar";
 
 function TeacherStudents() {
   const { user } = useAuth();
   const [students, setStudents] = useState([]);
+  const [removedIds, setRemovedIds] = useState(() => getRemovedStudentIds());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
+
+  // Removal Modals & State
+  const [studentToRemove, setStudentToRemove] = useState(null);
+  const [showRemovedModal, setShowRemovedModal] = useState(false);
+  const [lastRemoved, setLastRemoved] = useState(null);
 
   // Direct Message Modal State
   const [dmStudent, setDmStudent] = useState(null);
@@ -24,7 +35,7 @@ function TeacherStudents() {
 
   const showToast = (msg) => {
     setToast(msg);
-    setTimeout(() => setToast(""), 3500);
+    setTimeout(() => setToast(""), 4500);
   };
 
   useEffect(() => {
@@ -36,7 +47,22 @@ function TeacherStudents() {
         if (apiStudents.length > 0) {
           setStudents(apiStudents);
         } else {
-          setStudents(DEFAULT_STUDENTS_LIST.map((s) => ({
+          setStudents(
+            DEFAULT_STUDENTS_LIST.map((s) => ({
+              id: s.id,
+              name: s.name,
+              email: s.email,
+              totalDocuments: 3,
+              totalQuizAttempts: 2,
+              averageScore: 84,
+              lastActivity: new Date().toISOString(),
+            }))
+          );
+        }
+      } catch (err) {
+        setError(err.message || "Failed to load students.");
+        setStudents(
+          DEFAULT_STUDENTS_LIST.map((s) => ({
             id: s.id,
             name: s.name,
             email: s.email,
@@ -44,19 +70,8 @@ function TeacherStudents() {
             totalQuizAttempts: 2,
             averageScore: 84,
             lastActivity: new Date().toISOString(),
-          })));
-        }
-      } catch (err) {
-        setError(err.message || "Failed to load students.");
-        setStudents(DEFAULT_STUDENTS_LIST.map((s) => ({
-          id: s.id,
-          name: s.name,
-          email: s.email,
-          totalDocuments: 3,
-          totalQuizAttempts: 2,
-          averageScore: 84,
-          lastActivity: new Date().toISOString(),
-        })));
+          }))
+        );
       } finally {
         setLoading(false);
       }
@@ -64,6 +79,42 @@ function TeacherStudents() {
     fetchStudents();
   }, []);
 
+  // Remove handlers
+  const handleOpenRemoveModal = (student) => {
+    setStudentToRemove(student);
+  };
+
+  const handleConfirmRemove = () => {
+    if (!studentToRemove) return;
+    const updated = addRemovedStudentId(studentToRemove.id);
+    setRemovedIds(updated);
+    setLastRemoved(studentToRemove);
+    showToast(`Removed "${studentToRemove.name}" from your active roster.`);
+    setStudentToRemove(null);
+  };
+
+  const handleRestoreStudent = (studentId) => {
+    const updated = restoreRemovedStudentId(studentId);
+    setRemovedIds(updated);
+    const restored = allKnownStudents.find((s) => String(s.id) === String(studentId));
+    showToast(`Restored "${restored ? restored.name : "Student"}" back to roster!`);
+  };
+
+  const handleRestoreAll = () => {
+    restoreAllRemovedStudents();
+    setRemovedIds([]);
+    setShowRemovedModal(false);
+    setLastRemoved(null);
+    showToast("All students have been restored to your roster!");
+  };
+
+  const handleUndoRemove = () => {
+    if (!lastRemoved) return;
+    handleRestoreStudent(lastRemoved.id);
+    setLastRemoved(null);
+  };
+
+  // Direct message handlers
   const handleOpenDM = (student) => {
     setDmStudent(student);
     setDmMessages(getDirectMessages(student.id));
@@ -85,11 +136,48 @@ function TeacherStudents() {
     showToast(`Personal message delivered to ${dmStudent.name}!`);
   };
 
+  // All known students map for recovery
+  const allKnownStudents = (() => {
+    const map = new Map();
+    students.forEach((s) => map.set(String(s.id), s));
+    DEFAULT_STUDENTS_LIST.forEach((s) => {
+      if (!map.has(String(s.id))) {
+        map.set(String(s.id), {
+          id: s.id,
+          name: s.name,
+          email: s.email,
+          totalDocuments: 3,
+          totalQuizAttempts: 2,
+          averageScore: 84,
+          lastActivity: new Date().toISOString(),
+        });
+      }
+    });
+    return Array.from(map.values());
+  })();
+
+  const activeStudents = students.filter(
+    (s) => !removedIds.includes(String(s.id))
+  );
+
+  const filteredStudents = activeStudents.filter((s) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      (s.name && s.name.toLowerCase().includes(q)) ||
+      (s.email && s.email.toLowerCase().includes(q))
+    );
+  });
+
+  const removedStudentsList = allKnownStudents.filter((s) =>
+    removedIds.includes(String(s.id))
+  );
+
   return (
     <div style={{ minHeight: "100vh", background: "#faf9ff" }}>
       <Navbar activeTab="students" />
 
-      {/* Floating Toast */}
+      {/* Floating Toast Notification */}
       {toast && (
         <div
           style={{
@@ -98,7 +186,7 @@ function TeacherStudents() {
             right: "24px",
             background: "#1e1b4b",
             color: "#fff",
-            padding: "14px 24px",
+            padding: "14px 22px",
             borderRadius: "14px",
             boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
             zIndex: 10000,
@@ -106,39 +194,107 @@ function TeacherStudents() {
             fontWeight: "600",
             display: "flex",
             alignItems: "center",
-            gap: "10px",
+            gap: "12px",
           }}
         >
           <span>✨</span>
           <span>{toast}</span>
+          {lastRemoved && (
+            <button
+              onClick={handleUndoRemove}
+              style={{
+                marginLeft: "8px",
+                padding: "4px 12px",
+                background: "#7c3aed",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "8px",
+                fontSize: "12px",
+                fontWeight: "700",
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(124, 58, 237, 0.4)",
+              }}
+            >
+              Undo
+            </button>
+          )}
         </div>
       )}
 
       <main style={{ maxWidth: "1280px", margin: "40px auto", padding: "0 24px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px", flexWrap: "wrap", gap: "16px" }}>
+        {/* Top Header */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "28px",
+            flexWrap: "wrap",
+            gap: "16px",
+          }}
+        >
           <div>
-            <h1 style={{ fontSize: "28px", fontWeight: "800", color: "#1f2937", margin: 0 }}>
-              Assigned Students
-            </h1>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <h1 style={{ fontSize: "28px", fontWeight: "800", color: "#1f2937", margin: 0 }}>
+                Assigned Students
+              </h1>
+              <span
+                style={{
+                  background: "#ede9fe",
+                  color: "#6d28d9",
+                  padding: "4px 12px",
+                  borderRadius: "20px",
+                  fontSize: "13px",
+                  fontWeight: "700",
+                }}
+              >
+                {activeStudents.length} Active
+              </span>
+            </div>
             <p style={{ color: "#6b7280", marginTop: "6px", fontSize: "15px" }}>
-              Comprehensive performance monitoring, document review, and direct personal messaging.
+              Comprehensive performance monitoring, document review, roster management, and direct personal messaging.
             </p>
           </div>
 
-          <Link
-            to="/teacher/dashboard"
-            style={{
-              padding: "10px 20px",
-              background: "#ede9fe",
-              color: "#6d28d9",
-              borderRadius: "12px",
-              fontWeight: 600,
-              textDecoration: "none",
-              fontSize: "14px",
-            }}
-          >
-            ← Overview Dashboard
-          </Link>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            {removedStudentsList.length > 0 && (
+              <button
+                onClick={() => setShowRemovedModal(true)}
+                style={{
+                  padding: "10px 18px",
+                  background: "#fee2e2",
+                  color: "#b91c1c",
+                  border: "1px solid #fecaca",
+                  borderRadius: "12px",
+                  fontWeight: "700",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  transition: "background 0.2s",
+                }}
+              >
+                <span>🗑️</span>
+                <span>Removed Students ({removedStudentsList.length})</span>
+              </button>
+            )}
+
+            <Link
+              to="/teacher/dashboard"
+              style={{
+                padding: "10px 20px",
+                background: "#ede9fe",
+                color: "#6d28d9",
+                borderRadius: "12px",
+                fontWeight: 600,
+                textDecoration: "none",
+                fontSize: "14px",
+              }}
+            >
+              ← Overview Dashboard
+            </Link>
+          </div>
         </div>
 
         {error && (
@@ -147,14 +303,116 @@ function TeacherStudents() {
           </div>
         )}
 
+        {/* Search & Filter Toolbar */}
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: "16px",
+            padding: "16px 20px",
+            border: "1px solid #f3e8ff",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.02)",
+            marginBottom: "20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "14px",
+          }}
+        >
+          <div style={{ position: "relative", flex: "1 1 280px", maxWidth: "420px" }}>
+            <span
+              style={{
+                position: "absolute",
+                left: "14px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                fontSize: "15px",
+                color: "#9ca3af",
+                pointerEvents: "none",
+              }}
+            >
+              🔍
+            </span>
+            <input
+              type="text"
+              placeholder="Filter by student name or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 14px 10px 38px",
+                borderRadius: "10px",
+                border: "1.5px solid #e2e8f0",
+                fontSize: "13px",
+                outline: "none",
+                background: "#faf9ff",
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "13px", color: "#6b7280" }}>
+            <span>
+              Showing <strong>{filteredStudents.length}</strong> of {activeStudents.length} students
+            </span>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#7c3aed",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                }}
+              >
+                Clear filter
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Main Students Roster Card */}
         <div style={{ background: "#fff", borderRadius: "20px", padding: "28px", border: "1px solid #f3e8ff", boxShadow: "0 4px 20px rgba(0,0,0,0.03)" }}>
           {loading ? (
             <div style={{ textAlign: "center", padding: "40px 0", color: "#7c3aed" }}>
               ⏳ Loading student roster...
             </div>
-          ) : students.length === 0 ? (
+          ) : activeStudents.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "48px 20px" }}>
+              <div style={{ fontSize: "42px", marginBottom: "12px" }}>
+                {removedStudentsList.length > 0 ? "🗑️" : "👥"}
+              </div>
+              <h3 style={{ fontSize: "18px", fontWeight: "800", color: "#1f2937", margin: "0 0 6px 0" }}>
+                {removedStudentsList.length > 0 ? "All Students Removed from Roster" : "No Enrolled Students Found"}
+              </h3>
+              <p style={{ color: "#6b7280", margin: "0 0 20px 0", fontSize: "14px", maxWidth: "460px", marginLeft: "auto", marginRight: "auto" }}>
+                {removedStudentsList.length > 0
+                  ? "You have removed all students from your active roster view. You can restore them anytime with one click."
+                  : "No students currently assigned to your class. Students can join using your teacher code."}
+              </p>
+              {removedStudentsList.length > 0 && (
+                <button
+                  onClick={handleRestoreAll}
+                  style={{
+                    padding: "10px 22px",
+                    background: "#7c3aed",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "12px",
+                    fontWeight: "700",
+                    fontSize: "14px",
+                    cursor: "pointer",
+                    boxShadow: "0 4px 14px rgba(124, 58, 237, 0.3)",
+                  }}
+                >
+                  ↩ Restore All Students
+                </button>
+              )}
+            </div>
+          ) : filteredStudents.length === 0 ? (
             <div style={{ textAlign: "center", padding: "40px 0", color: "#6b7280" }}>
-              No students currently assigned to your class.
+              No students found matching &quot;{searchQuery}&quot;.
             </div>
           ) : (
             <div style={{ overflowX: "auto" }}>
@@ -167,18 +425,39 @@ function TeacherStudents() {
                     <th style={{ padding: "12px 16px" }}>Quiz Attempts</th>
                     <th style={{ padding: "12px 16px" }}>Average Accuracy</th>
                     <th style={{ padding: "12px 16px" }}>Personal Message</th>
-                    <th style={{ padding: "12px 16px" }}>Action</th>
+                    <th style={{ padding: "12px 16px", textAlign: "right" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {students.map((student) => (
+                  {filteredStudents.map((student) => (
                     <tr
                       key={student.id}
-                      style={{ borderBottom: "1px solid #f9fafb", cursor: "pointer" }}
+                      style={{ borderBottom: "1px solid #f9fafb", cursor: "pointer", transition: "background 0.15s" }}
                       onClick={() => navigate(`/teacher/students/${student.id}`)}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#faf9ff")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                     >
                       <td style={{ padding: "16px", fontWeight: "600", color: "#1f2937" }}>
-                        {student.name}
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <div
+                            style={{
+                              width: "34px",
+                              height: "34px",
+                              borderRadius: "50%",
+                              background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                              color: "#fff",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "13px",
+                              fontWeight: "700",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {student.name ? student.name.charAt(0).toUpperCase() : "S"}
+                          </div>
+                          <span>{student.name}</span>
+                        </div>
                       </td>
                       <td style={{ padding: "16px", color: "#6b7280", fontSize: "14px" }}>
                         {student.email}
@@ -196,8 +475,18 @@ function TeacherStudents() {
                             padding: "4px 8px",
                             borderRadius: "6px",
                             fontSize: "13px",
-                            background: (student.averageScore || 0) >= 70 ? "#dcfce7" : (student.averageScore || 0) >= 40 ? "#fef3c7" : "#fee2e2",
-                            color: (student.averageScore || 0) >= 70 ? "#15803d" : (student.averageScore || 0) >= 40 ? "#92400e" : "#b91c1c",
+                            background:
+                              (student.averageScore || 0) >= 70
+                                ? "#dcfce7"
+                                : (student.averageScore || 0) >= 40
+                                ? "#fef3c7"
+                                : "#fee2e2",
+                            color:
+                              (student.averageScore || 0) >= 70
+                                ? "#15803d"
+                                : (student.averageScore || 0) >= 40
+                                ? "#92400e"
+                                : "#b91c1c",
                           }}
                         >
                           {student.averageScore || 0}%
@@ -226,19 +515,71 @@ function TeacherStudents() {
                           <span>💬 Message Personally</span>
                         </button>
                       </td>
-                      <td style={{ padding: "16px" }}>
-                        <Link
-                          to={`/teacher/students/${student.id}`}
-                          onClick={(e) => e.stopPropagation()}
+                      <td style={{ padding: "16px", textAlign: "right" }}>
+                        <div
                           style={{
-                            color: "#7c3aed",
-                            fontWeight: "700",
-                            fontSize: "13px",
-                            textDecoration: "none",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            justifyContent: "flex-end",
                           }}
                         >
-                          Inspect Record →
-                        </Link>
+                          <Link
+                            to={`/teacher/students/${student.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              color: "#7c3aed",
+                              fontWeight: "700",
+                              fontSize: "12px",
+                              textDecoration: "none",
+                              padding: "6px 12px",
+                              background: "#f3e8ff",
+                              borderRadius: "8px",
+                              whiteSpace: "nowrap",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            <span>Inspect</span>
+                            <span>→</span>
+                          </Link>
+
+                          {/* REMOVE STUDENT BUTTON */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenRemoveModal(student);
+                            }}
+                            title={`Remove ${student.name} from class`}
+                            style={{
+                              padding: "6px 12px",
+                              background: "#fef2f2",
+                              color: "#dc2626",
+                              border: "1px solid #fee2e2",
+                              borderRadius: "8px",
+                              fontSize: "12px",
+                              fontWeight: "700",
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              whiteSpace: "nowrap",
+                              transition: "all 0.15s ease",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "#fee2e2";
+                              e.currentTarget.style.borderColor = "#fca5a5";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "#fef2f2";
+                              e.currentTarget.style.borderColor = "#fee2e2";
+                            }}
+                          >
+                            <span>🗑️</span>
+                            <span>Remove</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -248,6 +589,284 @@ function TeacherStudents() {
           )}
         </div>
       </main>
+
+      {/* ================= MODAL: CONFIRM REMOVE STUDENT ================= */}
+      {studentToRemove && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+          onClick={() => setStudentToRemove(null)}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "20px",
+              maxWidth: "480px",
+              width: "100%",
+              padding: "28px",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              border: "1px solid #fee2e2",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "16px" }}>
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  background: "#fee2e2",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "22px",
+                  flexShrink: 0,
+                }}
+              >
+                🗑️
+              </div>
+              <div>
+                <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#1f2937", margin: 0 }}>
+                  Remove Student
+                </h2>
+                <span style={{ fontSize: "13px", color: "#6b7280" }}>
+                  Confirm removal from active roster
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: "14px", color: "#4b5563", lineHeight: 1.6, margin: "0 0 16px 0" }}>
+              Are you sure you want to remove <strong>{studentToRemove.name}</strong> ({studentToRemove.email}) from your assigned students list?
+            </p>
+
+            <div
+              style={{
+                background: "#fef3c7",
+                border: "1px solid #fde68a",
+                borderRadius: "12px",
+                padding: "12px 16px",
+                fontSize: "13px",
+                color: "#92400e",
+                marginBottom: "24px",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "8px",
+                lineHeight: 1.5,
+              }}
+            >
+              <span>💡</span>
+              <span>
+                The student will be removed from your active student list. You can restore them anytime via the <strong>Removed Students</strong> button.
+              </span>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => setStudentToRemove(null)}
+                style={{
+                  padding: "10px 18px",
+                  background: "#f3f4f6",
+                  color: "#374151",
+                  border: "none",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemove}
+                style={{
+                  padding: "10px 20px",
+                  background: "#dc2626",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 12px rgba(220, 38, 38, 0.25)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <span>🗑️</span>
+                <span>Yes, Remove Student</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: VIEW & RESTORE REMOVED STUDENTS ================= */}
+      {showRemovedModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+          onClick={() => setShowRemovedModal(false)}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "24px",
+              maxWidth: "560px",
+              width: "100%",
+              padding: "28px",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              border: "1px solid #ede9fe",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <div>
+                <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#1f2937", margin: 0 }}>
+                  Removed Students ({removedStudentsList.length})
+                </h2>
+                <span style={{ fontSize: "13px", color: "#6b7280" }}>
+                  Restore individual students or all students back to your active roster
+                </span>
+              </div>
+              <button
+                onClick={() => setShowRemovedModal(false)}
+                style={{
+                  background: "#f3f4f6",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: "34px",
+                  height: "34px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                  fontSize: "15px",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {removedStudentsList.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "30px 0", color: "#6b7280", fontSize: "14px" }}>
+                No removed students to display.
+              </div>
+            ) : (
+              <div style={{ maxHeight: "320px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "10px", paddingRight: "4px" }}>
+                {removedStudentsList.map((st) => (
+                  <div
+                    key={st.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 16px",
+                      background: "#f9fafb",
+                      borderRadius: "12px",
+                      border: "1px solid #f3f4f6",
+                      gap: "12px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: "700", color: "#1f2937", fontSize: "14px" }}>{st.name}</div>
+                      <div style={{ fontSize: "12px", color: "#6b7280" }}>{st.email}</div>
+                    </div>
+                    <button
+                      onClick={() => handleRestoreStudent(st.id)}
+                      style={{
+                        padding: "6px 14px",
+                        background: "#dcfce7",
+                        color: "#15803d",
+                        border: "1px solid #bbf7d0",
+                        borderRadius: "8px",
+                        fontSize: "12px",
+                        fontWeight: "700",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      <span>↩</span>
+                      <span>Restore</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {removedStudentsList.length > 0 && (
+              <div
+                style={{
+                  marginTop: "20px",
+                  paddingTop: "16px",
+                  borderTop: "1px solid #f3f4f6",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <button
+                  onClick={handleRestoreAll}
+                  style={{
+                    padding: "9px 18px",
+                    background: "#7c3aed",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "10px",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    cursor: "pointer",
+                  }}
+                >
+                  ↩ Restore All Students
+                </button>
+                <button
+                  onClick={() => setShowRemovedModal(false)}
+                  style={{
+                    padding: "9px 18px",
+                    background: "#f3f4f6",
+                    color: "#374151",
+                    border: "none",
+                    borderRadius: "10px",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ================= MODAL: DIRECT PERSONAL MESSAGE TO STUDENT ================= */}
       {dmStudent && (
