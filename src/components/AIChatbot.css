@@ -372,3 +372,41 @@
     max-width: 92%;
   }
 }
+
+.chat-upload-btn {
+  height: 44px;
+  padding: 0 16px;
+  background: #f5f3ff;
+  color: #6d28d9;
+  border-radius: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  border: 1.5px solid #ddd6fe;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.chat-upload-btn:hover:not(.disabled) {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #5b21b6;
+  transform: translateY(-1px);
+}
+
+.chat-upload-btn.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .chat-upload-btn {
+    padding: 0 12px;
+  }
+}

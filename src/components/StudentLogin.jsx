@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
+import { isStudentRemoved, logClassroomEntry } from "../services/frontendStorage";
 import studentImage from "../assets/student/student.png";
 
 function StudentLogin() {
@@ -29,7 +30,23 @@ function StudentLogin() {
       if (!finalId.includes('@')) {
         finalId = finalId + '@lerniq.edu';
       }
-      await loginStudent(finalId, password);
+
+      // Check if student was removed by teacher
+      if (isStudentRemoved(finalId) || isStudentRemoved(username.trim())) {
+        setErrorMessage("Access Denied: You have been removed from the class by your teacher and cannot log in again with this email.");
+        setLoading(false);
+        return;
+      }
+
+      const res = await loginStudent(finalId, password);
+
+      // Log student entering class so teacher gets real-time notification
+      logClassroomEntry({
+        studentId: res?.user?.id || finalId,
+        studentName: res?.user?.name || username.trim(),
+        studentEmail: res?.user?.email || finalId,
+      });
+
       navigate("/student/dashboard");
     } catch (err) {
       if (err.data?.requiresOtp) {

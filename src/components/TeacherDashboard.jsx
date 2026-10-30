@@ -16,6 +16,7 @@ import {
   uploadNote,
   DEFAULT_STUDENTS_LIST,
   getRemovedStudentIds,
+  getTeacherClassCode,
 } from "../services/frontendStorage";
 import Navbar from "./Navbar";
 
@@ -89,7 +90,7 @@ function TeacherDashboard() {
     setDirectMessages(getDirectMessages(selectedStudentForDM));
   }, [selectedStudentForDM]);
 
-  const teacherCode = dashboardData?.teacherProfile?.teacherCode || "TEACH-101";
+  const teacherCode = dashboardData?.teacherProfile?.teacherCode || getTeacherClassCode(user?.id || user?._id || "default_teacher");
   const recentActivity = dashboardData?.recentActivity || [];
 
   // Dynamic quizzes conducted from frontend storage

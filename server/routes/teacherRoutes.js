@@ -7,6 +7,7 @@ const {
   getStudentQuizResults,
   getAllAssignedDocuments,
   getAllAssignedQuizResults,
+  removeStudentFromClass,
 } = require("../controllers/teacherController");
 const { authenticate, requireRole } = require("../middleware/authMiddleware");
 
@@ -19,5 +20,7 @@ router.get("/students/:studentId", getStudentDetails);
 router.get("/students/:studentId/quiz-results", getStudentQuizResults);
 router.get("/documents", getAllAssignedDocuments);
 router.get("/quiz-results", getAllAssignedQuizResults);
+router.delete("/students/:studentId", removeStudentFromClass);
+router.post("/students/:studentId/remove", removeStudentFromClass);
 
 module.exports = router;

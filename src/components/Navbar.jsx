@@ -1,15 +1,19 @@
+import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   getInstitutionName,
   setInstitutionName,
   getTeacherSubject,
   setTeacherSubject,
+  getTeacherClassCode,
+  getClassroomEntries,
+  markClassroomEntriesAsRead,
+  onLerniqSync,
 } from "../services/frontendStorage";
 
-export default function Navbar({ activeTab = "dashboard" }) {
+function Navbar({ activeTab = "dashboard" }) {
   const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
 
@@ -26,13 +30,42 @@ export default function Navbar({ activeTab = "dashboard" }) {
   const [copiedCode, setCopiedCode] = useState(false);
   const [saveToast, setSaveToast] = useState("");
 
-  const classCode = "TEACH-101";
+  // Unique Teacher Class Code
+  const [classCode, setClassCode] = useState(() => {
+    return user?.profile?.teacherCode || getTeacherClassCode(user?.id || user?._id || "default_teacher");
+  });
+
+  // Classroom Entry Alerts (Teacher header popup)
+  const [showClassEntryPopup, setShowClassEntryPopup] = useState(false);
+  const [classroomEntries, setClassroomEntries] = useState(() => getClassroomEntries());
+  const [entryToast, setEntryToast] = useState(null);
+
+  const unreadCount = classroomEntries.filter((e) => !e.read).length;
 
   useEffect(() => {
     if (user?.name) setTeacherName(user.name);
     setTeacherSubjectState(getTeacherSubject());
     setInstitutionState(getInstitutionName());
-  }, [user]);
+    if (isTeacher) {
+      const code = user?.profile?.teacherCode || getTeacherClassCode(user?.id || user?._id || "default_teacher");
+      setClassCode(code);
+    }
+  }, [user, isTeacher]);
+
+  useEffect(() => {
+    if (!isTeacher) return;
+    setClassroomEntries(getClassroomEntries());
+    const unsubscribe = onLerniqSync((detail) => {
+      if (detail.type === "STUDENT_ENTERED_CLASS") {
+        setClassroomEntries(getClassroomEntries());
+        setEntryToast(`🔔 ${detail.payload.studentName || "Student"} entered your classroom!`);
+        setTimeout(() => setEntryToast(null), 5000);
+      } else if (detail.type === "CLASSROOM_ENTRIES_READ") {
+        setClassroomEntries(getClassroomEntries());
+      }
+    });
+    return unsubscribe;
+  }, [isTeacher]);
 
   const handleLogout = async () => {
     await logout();
@@ -75,6 +108,46 @@ export default function Navbar({ activeTab = "dashboard" }) {
 
   return (
     <>
+      {/* Real-time Entry Toast Alert for Teacher */}
+      {entryToast && isTeacher && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          style={{
+            position: "fixed",
+            top: "70px",
+            right: "24px",
+            zIndex: 99999,
+            background: "linear-gradient(135deg, #10b981, #059669)",
+            color: "#ffffff",
+            padding: "12px 20px",
+            borderRadius: "12px",
+            boxShadow: "0 10px 25px rgba(16, 185, 129, 0.4)",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            fontWeight: "700",
+            fontSize: "14px",
+          }}
+        >
+          <span>{entryToast}</span>
+          <button
+            onClick={() => setEntryToast(null)}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#ffffff",
+              fontSize: "16px",
+              cursor: "pointer",
+              marginLeft: "8px",
+            }}
+          >
+            ✕
+          </button>
+        </motion.div>
+      )}
+
       <header className="dashboard-navbar">
         <Link to={isTeacher ? "/teacher/dashboard" : "/student/dashboard"} style={{ textDecoration: "none" }}>
           <div className="dashboard-brand">
@@ -109,6 +182,12 @@ export default function Navbar({ activeTab = "dashboard" }) {
                 className={`nav-link ${activeTab === "lectures-notes" || activeTab === "courses" ? "active" : ""}`}
               >
                 Lectures & Notes
+              </Link>
+              <Link
+                to="/student/quizzes"
+                className={`nav-link ${activeTab === "quizzes" ? "active" : ""}`}
+              >
+                Quizzes
               </Link>
               <Link
                 to="/student/chat"
@@ -153,7 +232,177 @@ export default function Navbar({ activeTab = "dashboard" }) {
           )}
         </nav>
 
-        <div className="dashboard-actions">
+        <div className="dashboard-actions" style={{ display: "flex", alignItems: "center" }}>
+          {/* POPUP NOTIFICATION: BETWEEN QUIZ RESULTS AND PROFILE IN HEADER */}
+          {isTeacher && (
+            <div style={{ position: "relative", marginRight: "14px" }}>
+              <button
+                type="button"
+                className="icon-button notification-button"
+                onClick={() => {
+                  const nextState = !showClassEntryPopup;
+                  setShowClassEntryPopup(nextState);
+                  if (nextState) {
+                    markClassroomEntriesAsRead();
+                  }
+                }}
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "50%",
+                  border: unreadCount > 0 ? "1.5px solid #a78bfa" : "1px solid #e2e8f0",
+                  background: unreadCount > 0 ? "#ede9fe" : "#ffffff",
+                  color: unreadCount > 0 ? "#6d28d9" : "#64748b",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  position: "relative",
+                  boxShadow: unreadCount > 0 ? "0 4px 12px rgba(124, 58, 237, 0.2)" : "none",
+                  transition: "all 0.2s ease",
+                }}
+                title="Classroom Entry Notifications (Students entering class)"
+                aria-label="Student Entries Notification"
+              >
+                <span style={{ fontSize: "16px" }}>🔔</span>
+                {unreadCount > 0 && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: "-4px",
+                      right: "-4px",
+                      background: "#ef4444",
+                      color: "#ffffff",
+                      borderRadius: "10px",
+                      padding: "1px 5px",
+                      fontSize: "10px",
+                      fontWeight: "800",
+                      minWidth: "16px",
+                      textAlign: "center",
+                      lineHeight: "14px",
+                      border: "2px solid #ffffff",
+                    }}
+                  >
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Popup Dropdown */}
+              {showClassEntryPopup && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "46px",
+                    right: 0,
+                    width: "330px",
+                    background: "#ffffff",
+                    borderRadius: "16px",
+                    boxShadow: "0 12px 36px rgba(0,0,0,0.18)",
+                    border: "1px solid #ede9fe",
+                    zIndex: 99999,
+                    overflow: "hidden",
+                    animation: "fadeIn 0.2s ease-out",
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "14px 18px",
+                      background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+                      color: "#ffffff",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: "800", fontSize: "14px" }}>
+                        🚪 Classroom Entry Alerts
+                      </div>
+                      <small style={{ opacity: 0.85, fontSize: "11px" }}>
+                        Real-time student entrance log
+                      </small>
+                    </div>
+                    <button
+                      onClick={() => setShowClassEntryPopup(false)}
+                      style={{
+                        background: "rgba(255,255,255,0.2)",
+                        border: "none",
+                        color: "#fff",
+                        borderRadius: "50%",
+                        width: "24px",
+                        height: "24px",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div style={{ maxHeight: "300px", overflowY: "auto", padding: "10px" }}>
+                    {classroomEntries.length === 0 ? (
+                      <div style={{ padding: "24px 16px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                        <span style={{ fontSize: "28px", display: "block", marginBottom: "6px" }}>👋</span>
+                        No recent student entries recorded yet.
+                        <br />
+                        <small style={{ fontSize: "11px", color: "#cbd5e1" }}>
+                          When a student signs in or joins class, you will be notified here immediately.
+                        </small>
+                      </div>
+                    ) : (
+                      classroomEntries.map((entry) => (
+                        <div
+                          key={entry.id}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: "10px",
+                            background: entry.read ? "#ffffff" : "#f5f3ff",
+                            border: "1px solid",
+                            borderColor: entry.read ? "#f1f5f9" : "#ddd6fe",
+                            marginBottom: "8px",
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: "10px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: "32px",
+                              height: "32px",
+                              borderRadius: "50%",
+                              background: entry.read ? "#f1f5f9" : "#ede9fe",
+                              color: "#6d28d9",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontWeight: "800",
+                              fontSize: "13px",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {entry.studentName ? entry.studentName.charAt(0).toUpperCase() : "S"}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: "13px", fontWeight: "700", color: "#1e293b" }}>
+                              {entry.studentName}
+                            </div>
+                            <div style={{ fontSize: "11px", color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {entry.studentEmail}
+                            </div>
+                            <div style={{ fontSize: "10px", color: "#8b5cf6", marginTop: "3px", fontWeight: "600" }}>
+                              Entered Classroom • {entry.timestamp} ({entry.date})
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Avatar and Name clickable to open profile */}
           <div
             className="student-profile"
@@ -192,7 +441,7 @@ export default function Navbar({ activeTab = "dashboard" }) {
             Logout
           </motion.button>
 
-          {/* Mobile Navigation Hamburger Toggle (strictly hidden on desktop > 900px) */}
+          {/* Mobile Navigation Hamburger Toggle */}
           <button
             className="mobile-nav-toggle"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -220,7 +469,7 @@ export default function Navbar({ activeTab = "dashboard" }) {
         </div>
       </header>
 
-      {/* ================= MOBILE NAV DRAWER (strictly hidden on desktop > 900px) ================= */}
+      {/* ================= MOBILE NAV DRAWER ================= */}
       {mobileMenuOpen && (
         <>
           <div
@@ -263,11 +512,19 @@ export default function Navbar({ activeTab = "dashboard" }) {
                   <span>Lectures & Notes</span>
                 </Link>
                 <Link
+                  to="/student/quizzes"
+                  className={`mobile-nav-link ${activeTab === "quizzes" ? "active" : ""}`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <span>🎯</span>
+                  <span>Quizzes</span>
+                </Link>
+                <Link
                   to="/student/chat"
                   className={`mobile-nav-link ${activeTab === "chat" ? "active" : ""}`}
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <span>🤖</span>
+                  <span>💬</span>
                   <span>AI Tutor</span>
                 </Link>
                 <Link
@@ -302,7 +559,7 @@ export default function Navbar({ activeTab = "dashboard" }) {
                   className={`mobile-nav-link ${activeTab === "documents" ? "active" : ""}`}
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <span>📚</span>
+                  <span>📑</span>
                   <span>Course Content & Quizzes</span>
                 </Link>
                 <Link
@@ -310,7 +567,7 @@ export default function Navbar({ activeTab = "dashboard" }) {
                   className={`mobile-nav-link ${activeTab === "quiz-results" ? "active" : ""}`}
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <span>📈</span>
+                  <span>🎯</span>
                   <span>Quiz Results</span>
                 </Link>
               </>
@@ -328,8 +585,8 @@ export default function Navbar({ activeTab = "dashboard" }) {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(4px)",
+            background: "rgba(15, 23, 42, 0.7)",
+            backdropFilter: "blur(6px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -341,43 +598,42 @@ export default function Navbar({ activeTab = "dashboard" }) {
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95 }}
+            exit={{ opacity: 0, scale: 0.95, y: 15 }}
             style={{
               background: "#ffffff",
               borderRadius: "24px",
-              maxWidth: "540px",
               width: "100%",
+              maxWidth: "520px",
+              boxShadow: "0 25px 60px rgba(0,0,0,0.25)",
+              border: "1px solid #e2e8f0",
               overflow: "hidden",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-              border: "1px solid #f1f5f9",
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
+            {/* Header */}
             <div
               style={{
-                background: "linear-gradient(135deg, #4c1d95, #6d28d9)",
-                color: "#fff",
-                padding: "28px",
+                background: "linear-gradient(135deg, #7c3aed, #4c1d95)",
+                padding: "24px 28px",
+                color: "#ffffff",
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
                 <div
                   style={{
-                    width: "56px",
-                    height: "56px",
+                    width: "48px",
+                    height: "48px",
                     borderRadius: "50%",
-                    background: "#ffffff",
-                    color: "#6d28d9",
+                    background: "rgba(255,255,255,0.2)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: "24px",
+                    fontSize: "22px",
                     fontWeight: "800",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                    border: "2px solid rgba(255,255,255,0.4)",
                   }}
                 >
                   {teacherName.charAt(0).toUpperCase()}
@@ -389,7 +645,6 @@ export default function Navbar({ activeTab = "dashboard" }) {
                   <h2 style={{ fontSize: "20px", fontWeight: "800", margin: "4px 0 0 0" }}>
                     {teacherName}
                   </h2>
-                  <div style={{ fontSize: "12px", opacity: 0.85 }}>{user?.email || "teacher@lerniq.edu"}</div>
                 </div>
               </div>
 
@@ -399,11 +654,11 @@ export default function Navbar({ activeTab = "dashboard" }) {
                   background: "rgba(255, 255, 255, 0.2)",
                   border: "none",
                   borderRadius: "50%",
-                  width: "36px",
-                  height: "36px",
-                  fontSize: "16px",
+                  width: "32px",
+                  height: "32px",
+                  color: "#ffffff",
+                  fontSize: "14px",
                   cursor: "pointer",
-                  color: "#fff",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -413,9 +668,10 @@ export default function Navbar({ activeTab = "dashboard" }) {
               </button>
             </div>
 
+            {/* Save Notification Toast */}
             {saveToast && (
-              <div style={{ background: "#ecfdf5", color: "#065f46", padding: "10px 20px", fontSize: "13px", fontWeight: "700", textAlign: "center" }}>
-                ✅ {saveToast}
+              <div style={{ background: "#dcfce7", color: "#166534", padding: "12px 28px", fontSize: "13px", fontWeight: "700", borderBottom: "1px solid #bbf7d0" }}>
+                ✓ {saveToast}
               </div>
             )}
 
@@ -424,44 +680,71 @@ export default function Navbar({ activeTab = "dashboard" }) {
               {/* Field 1: Teacher Name */}
               <div style={{ marginBottom: "18px" }}>
                 <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                  👨‍🏫 Teacher Name
+                  Full Name / Title
                 </label>
                 <input
                   type="text"
                   value={teacherName}
                   onChange={(e) => setTeacherName(e.target.value)}
                   placeholder="e.g. Prof. Sarah Jenkins"
-                  style={{ width: "100%", padding: "11px 14px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", boxSizing: "border-box" }}
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    borderRadius: "10px",
+                    border: "1.5px solid #cbd5e1",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    color: "#1e293b",
+                    boxSizing: "border-box",
+                  }}
                   required
                 />
               </div>
 
-              {/* Field 2: Subject / Department */}
+              {/* Field 2: Subject */}
               <div style={{ marginBottom: "18px" }}>
                 <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                  📚 Teaching Subject / Department
+                  Subject / Specialization
                 </label>
                 <input
                   type="text"
                   value={teacherSubject}
                   onChange={(e) => setTeacherSubjectState(e.target.value)}
                   placeholder="e.g. Computer Science & AI"
-                  style={{ width: "100%", padding: "11px 14px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", boxSizing: "border-box" }}
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    borderRadius: "10px",
+                    border: "1.5px solid #cbd5e1",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    color: "#1e293b",
+                    boxSizing: "border-box",
+                  }}
                   required
                 />
               </div>
 
-              {/* Field 3: University / School / College */}
-              <div style={{ marginBottom: "20px" }}>
+              {/* Field 3: Institution */}
+              <div style={{ marginBottom: "18px" }}>
                 <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                  🏛️ University / School / College Name
+                  College / School / University
                 </label>
                 <input
                   type="text"
                   value={institution}
                   onChange={(e) => setInstitutionState(e.target.value)}
-                  placeholder="e.g. Stanford University / Delhi University"
-                  style={{ width: "100%", padding: "11px 14px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", boxSizing: "border-box" }}
+                  placeholder="e.g. Stanford University"
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    borderRadius: "10px",
+                    border: "1.5px solid #cbd5e1",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    color: "#1e293b",
+                    boxSizing: "border-box",
+                  }}
                   required
                 />
                 <small style={{ color: "#64748b", fontSize: "11px", display: "block", marginTop: "4px" }}>
@@ -474,7 +757,7 @@ export default function Navbar({ activeTab = "dashboard" }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "1px", color: "#64748b" }}>
-                      YOUR ACTIVE CLASS CODE
+                      YOUR UNIQUE CLASS CODE
                     </span>
                     <div style={{ fontSize: "20px", fontWeight: "800", color: "#1e293b", letterSpacing: "1.5px", marginTop: "2px" }}>
                       {classCode}
@@ -492,14 +775,18 @@ export default function Navbar({ activeTab = "dashboard" }) {
                       fontSize: "12px",
                       fontWeight: "700",
                       cursor: "pointer",
+                      transition: "all 0.2s ease",
                     }}
                   >
                     {copiedCode ? "✓ Copied!" : "📋 Copy Code"}
                   </button>
                 </div>
+                <small style={{ color: "#64748b", fontSize: "11px", display: "block", marginTop: "8px" }}>
+                  Share this unique code with students so they can join your class during registration.
+                </small>
               </div>
 
-              {/* Actions */}
+              {/* Action Buttons */}
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
                 <button
                   type="button"
@@ -510,7 +797,7 @@ export default function Navbar({ activeTab = "dashboard" }) {
                     color: "#475569",
                     border: "none",
                     borderRadius: "10px",
-                    fontSize: "14px",
+                    fontSize: "13px",
                     fontWeight: "600",
                     cursor: "pointer",
                   }}
@@ -525,7 +812,7 @@ export default function Navbar({ activeTab = "dashboard" }) {
                     color: "#ffffff",
                     border: "none",
                     borderRadius: "10px",
-                    fontSize: "14px",
+                    fontSize: "13px",
                     fontWeight: "700",
                     cursor: "pointer",
                     boxShadow: "0 4px 14px rgba(124, 58, 237, 0.3)",
@@ -541,3 +828,5 @@ export default function Navbar({ activeTab = "dashboard" }) {
     </>
   );
 }
+
+export default Navbar;

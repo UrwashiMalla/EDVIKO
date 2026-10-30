@@ -5,6 +5,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth/mammoth.browser";
 import { documentApi } from "../services/api";
 import Navbar from "./Navbar";
+import { recognizeImageQuestion } from "../utils/imageOcrHelper";
 
 import "./LearningWorkspace.css";
 
@@ -75,21 +76,16 @@ function LearningWorkspace({ onBack, onStartLearning }) {
   // =============================
   const extractImageText = async (file) => {
     try {
-      const { createWorker } = await import("tesseract.js");
-      const worker = await createWorker("eng");
-      const ret = await worker.recognize(file);
-      await worker.terminate();
-      const recognized = ret?.data?.text?.trim();
-
-      if (recognized && recognized.length > 15) {
+      // Use enhanced contrast preprocessing for handwritten notes and pen questions
+      const recognized = await recognizeImageQuestion(file);
+      if (recognized && recognized.length > 10) {
         return recognized;
       }
     } catch (ocrErr) {
-      console.warn("Tesseract OCR warning:", ocrErr);
+      console.warn("Image handwriting OCR warning:", ocrErr);
     }
 
-    // High quality contextual fallback for diagrams, whiteboard notes, formula snapshots
-    return `[Study Material Image: ${file.name}]\nImage uploaded by student for AI analysis. Contains lecture slides, study notes, or diagram concepts. Master this topic with AI Summary, Practice Questions, Quiz, and AI Tutor explanations.`;
+    return `[Study Material Image: ${file.name}]\nImage uploaded by student for AI analysis. Contains handwritten notes, lecture slides, or diagram concepts. Master this topic with AI Summary, Practice Questions, Quiz, and AI Tutor explanations.`;
   };
 
   // =============================

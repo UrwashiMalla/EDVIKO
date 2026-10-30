@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isRemoved: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

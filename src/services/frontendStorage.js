@@ -1,25 +1,79 @@
 /**
  * frontendStorage.js
- * Frontend-only persistence using localStorage for:
- * - Teacher messages & announcements
+ * Frontend persistence & real-time sync bus for:
+ * - Teacher messages & announcements (group broadcast)
  * - Personal direct messages between student & teacher
  * - University/School/College name
- * - Uploaded Notes & Lectures with delete functionality
- * - Quizzes conducted & Student quiz attempt records
+ * - Uploaded Notes & Lectures with live sync
+ * - Quizzes conducted, student submissions & actual score tracking
+ * - Blocked/removed student list
+ * - Classroom entry alerts for teachers
+ * - Event-driven sync bus for immediate cross-portal updates
  */
 
 const STORAGE_KEYS = {
   INSTITUTION: "lerniq_institution_name",
   TEACHER_SUBJECT: "lerniq_teacher_subject",
+  TEACHER_CLASS_CODE: "lerniq_teacher_class_code",
   TEACHER_BROADCASTS: "lerniq_teacher_broadcasts",
   DIRECT_MESSAGES: "lerniq_student_teacher_messages",
   NOTES: "lerniq_uploaded_notes",
   LECTURES: "lerniq_uploaded_lectures",
   QUIZZES: "lerniq_conducted_quizzes",
+  STUDENT_ATTEMPTS: "lerniq_student_quiz_attempts",
   REMOVED_STUDENTS: "lerniq_removed_students",
+  REMOVED_EMAILS: "lerniq_removed_emails",
+  CLASSROOM_ENTRIES: "lerniq_classroom_entries",
+  STUDENT_POPUPS: "lerniq_student_popups",
+  DISMISSED_POPUPS: "lerniq_dismissed_popups",
+  SYNC_HEARTBEAT: "lerniq_sync_heartbeat",
 };
 
-// Default institution
+// ==========================================
+// REAL-TIME SYNC EVENT BUS
+// ==========================================
+export const notifyLerniqSync = (type, payload = {}) => {
+  try {
+    const detail = { type, payload, timestamp: Date.now() };
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("lerniq_sync", { detail }));
+      localStorage.setItem(STORAGE_KEYS.SYNC_HEARTBEAT, JSON.stringify(detail));
+    }
+  } catch (err) {
+    console.warn("Sync dispatch warning:", err);
+  }
+};
+
+export const onLerniqSync = (callback) => {
+  if (typeof window === "undefined") return () => {};
+
+  const handleCustom = (e) => {
+    if (e.detail) callback(e.detail);
+  };
+
+  const handleStorage = (e) => {
+    if (e.key === STORAGE_KEYS.SYNC_HEARTBEAT && e.newValue) {
+      try {
+        const parsed = JSON.parse(e.newValue);
+        callback(parsed);
+      } catch {
+        // ignore JSON parse errors
+      }
+    }
+  };
+
+  window.addEventListener("lerniq_sync", handleCustom);
+  window.addEventListener("storage", handleStorage);
+
+  return () => {
+    window.removeEventListener("lerniq_sync", handleCustom);
+    window.removeEventListener("storage", handleStorage);
+  };
+};
+
+// ==========================================
+// INSTITUTION & SUBJECT
+// ==========================================
 export const getInstitutionName = () => {
   return localStorage.getItem(STORAGE_KEYS.INSTITUTION) || "Stanford University";
 };
@@ -27,10 +81,10 @@ export const getInstitutionName = () => {
 export const setInstitutionName = (name) => {
   if (name && name.trim()) {
     localStorage.setItem(STORAGE_KEYS.INSTITUTION, name.trim());
+    notifyLerniqSync("INSTITUTION_UPDATED", { name: name.trim() });
   }
 };
 
-// Teacher Subject / Department
 export const getTeacherSubject = () => {
   return localStorage.getItem(STORAGE_KEYS.TEACHER_SUBJECT) || "Computer Science & Artificial Intelligence";
 };
@@ -38,10 +92,26 @@ export const getTeacherSubject = () => {
 export const setTeacherSubject = (subj) => {
   if (subj && subj.trim()) {
     localStorage.setItem(STORAGE_KEYS.TEACHER_SUBJECT, subj.trim());
+    notifyLerniqSync("SUBJECT_UPDATED", { subject: subj.trim() });
   }
 };
 
-// Default Enrolled Class Students for Personal Messaging
+// ==========================================
+// UNIQUE CLASS CODE FOR TEACHERS
+// ==========================================
+export const getTeacherClassCode = (teacherId = "default_teacher") => {
+  const key = `${STORAGE_KEYS.TEACHER_CLASS_CODE}_${teacherId}`;
+  let code = localStorage.getItem(key);
+  if (!code) {
+    // Generate unique random class code: e.g. TEACH-8K4P
+    const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+    code = `TEACH-${rand}`;
+    localStorage.setItem(key, code);
+  }
+  return code;
+};
+
+// Default Enrolled Class Students
 export const DEFAULT_STUDENTS_LIST = [
   { id: "default_student", name: "Alex Smith", email: "alexsmith@lerniq.edu", studentId: "std_101" },
   { id: "std_102", name: "Marcus Chen", email: "marcus.chen@lerniq.edu", studentId: "std_102" },
@@ -54,7 +124,7 @@ export const DEFAULT_STUDENTS_LIST = [
 ];
 
 // ==========================================
-// REMOVED STUDENTS PERSISTENCE (FRONTEND-ONLY)
+// REMOVED / BLOCKED STUDENTS
 // ==========================================
 export const getRemovedStudentIds = () => {
   try {
@@ -65,16 +135,41 @@ export const getRemovedStudentIds = () => {
   }
 };
 
-export const addRemovedStudentId = (studentId) => {
-  if (!studentId) return getRemovedStudentIds();
-  const current = getRemovedStudentIds();
-  const idStr = String(studentId);
-  if (!current.includes(idStr)) {
-    const updated = [...current, idStr];
-    localStorage.setItem(STORAGE_KEYS.REMOVED_STUDENTS, JSON.stringify(updated));
-    return updated;
+export const getRemovedStudentEmails = () => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.REMOVED_EMAILS);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
   }
-  return current;
+};
+
+export const isStudentRemoved = (idOrEmail) => {
+  if (!idOrEmail) return false;
+  const target = String(idOrEmail).toLowerCase().trim();
+  const ids = getRemovedStudentIds().map((id) => String(id).toLowerCase());
+  const emails = getRemovedStudentEmails().map((e) => String(e).toLowerCase());
+  return ids.includes(target) || emails.includes(target);
+};
+
+export const addRemovedStudentId = (studentId, studentEmail = null) => {
+  if (!studentId) return getRemovedStudentIds();
+  const currentIds = getRemovedStudentIds();
+  const idStr = String(studentId);
+  const updatedIds = currentIds.includes(idStr) ? currentIds : [...currentIds, idStr];
+  localStorage.setItem(STORAGE_KEYS.REMOVED_STUDENTS, JSON.stringify(updatedIds));
+
+  if (studentEmail) {
+    const currentEmails = getRemovedStudentEmails();
+    const emStr = String(studentEmail).toLowerCase().trim();
+    if (!currentEmails.includes(emStr)) {
+      const updatedEmails = [...currentEmails, emStr];
+      localStorage.setItem(STORAGE_KEYS.REMOVED_EMAILS, JSON.stringify(updatedEmails));
+    }
+  }
+
+  notifyLerniqSync("STUDENT_REMOVED", { studentId: idStr, studentEmail });
+  return updatedIds;
 };
 
 export const restoreRemovedStudentId = (studentId) => {
@@ -82,16 +177,19 @@ export const restoreRemovedStudentId = (studentId) => {
   const idStr = String(studentId);
   const updated = current.filter((id) => id !== idStr);
   localStorage.setItem(STORAGE_KEYS.REMOVED_STUDENTS, JSON.stringify(updated));
+  notifyLerniqSync("STUDENT_RESTORED", { studentId: idStr });
   return updated;
 };
 
 export const restoreAllRemovedStudents = () => {
   localStorage.removeItem(STORAGE_KEYS.REMOVED_STUDENTS);
+  localStorage.removeItem(STORAGE_KEYS.REMOVED_EMAILS);
+  notifyLerniqSync("ALL_STUDENTS_RESTORED");
   return [];
 };
 
 // ==========================================
-// TEACHER BROADCAST MESSAGES / ANNOUNCEMENTS
+// TEACHER BROADCAST (GROUP MESSAGES)
 // ==========================================
 const DEFAULT_BROADCASTS = [
   {
@@ -146,6 +244,20 @@ export const saveTeacherBroadcast = ({ title, content, tag = "Announcement", pri
   };
   const updated = [newBroadcast, ...current];
   localStorage.setItem(STORAGE_KEYS.TEACHER_BROADCASTS, JSON.stringify(updated));
+
+  // Trigger pop-up notice for all students
+  addStudentPopup({
+    id: `popup-${Date.now()}`,
+    type: "announcement",
+    title: `📢 New Class Announcement: ${title}`,
+    message: content,
+    sender: teacherName,
+    link: "/student/dashboard",
+    linkText: "View Announcement",
+    timestamp: Date.now(),
+  });
+
+  notifyLerniqSync("BROADCAST_CREATED", newBroadcast);
   return updated;
 };
 
@@ -153,11 +265,12 @@ export const deleteTeacherBroadcast = (id) => {
   const current = getTeacherBroadcasts();
   const updated = current.filter((item) => item.id !== id);
   localStorage.setItem(STORAGE_KEYS.TEACHER_BROADCASTS, JSON.stringify(updated));
+  notifyLerniqSync("BROADCAST_DELETED", { id });
   return updated;
 };
 
 // ==========================================
-// DIRECT 1-ON-1 MESSAGES (STUDENT <-> TEACHER)
+// DIRECT 1-ON-1 MESSAGES (PARTICULAR STUDENT ONLY)
 // ==========================================
 const DEFAULT_DIRECT_MESSAGES = [
   {
@@ -191,26 +304,32 @@ const DEFAULT_DIRECT_MESSAGES = [
 
 export const getDirectMessages = (studentKey = "default_student") => {
   try {
-    const data = localStorage.getItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${studentKey}`);
+    const cleanKey = String(studentKey || "default_student").toLowerCase();
+    const data = localStorage.getItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${cleanKey}`);
     if (!data) {
-      localStorage.setItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${studentKey}`, JSON.stringify(DEFAULT_DIRECT_MESSAGES));
-      return DEFAULT_DIRECT_MESSAGES;
+      if (cleanKey === "default_student" || cleanKey.includes("alexsmith")) {
+        localStorage.setItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${cleanKey}`, JSON.stringify(DEFAULT_DIRECT_MESSAGES));
+        return DEFAULT_DIRECT_MESSAGES;
+      }
+      return [];
     }
     return JSON.parse(data);
   } catch {
-    return DEFAULT_DIRECT_MESSAGES;
+    return [];
   }
 };
 
-export const sendDirectMessage = (studentKey = "default_student", { senderRole, senderName, text, studentName = "Student" }) => {
-  const current = getDirectMessages(studentKey);
+export const sendDirectMessage = (studentKey = "default_student", { senderRole, senderName, text, studentName = "Student", type = "chat" }) => {
+  const cleanKey = String(studentKey || "default_student").toLowerCase();
+  const current = getDirectMessages(cleanKey);
   const newMsg = {
     id: `dm-${Date.now()}`,
-    studentId: studentKey,
+    studentId: cleanKey,
     studentName,
     senderRole, // "student" or "teacher"
     senderName,
     text,
+    type,
     timestamp: new Date().toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -219,12 +338,56 @@ export const sendDirectMessage = (studentKey = "default_student", { senderRole, 
     }),
   };
   const updated = [...current, newMsg];
-  localStorage.setItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${studentKey}`, JSON.stringify(updated));
+  localStorage.setItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${cleanKey}`, JSON.stringify(updated));
+
+  // If teacher sent it to student, create a popup notification for that specific student!
+  if (senderRole === "teacher") {
+    addStudentPopup({
+      id: `dm-pop-${Date.now()}`,
+      targetStudentKey: cleanKey,
+      type: type === "quiz_reminder" ? "reminder" : "message",
+      title: type === "quiz_reminder" ? `⏰ Quiz Reminder from ${senderName}` : `💬 Message from ${senderName}`,
+      message: text,
+      sender: senderName,
+      link: type === "quiz_reminder" ? "/student/quizzes" : "/student/dashboard",
+      linkText: type === "quiz_reminder" ? "Go to Quizzes" : "Reply Message",
+      timestamp: Date.now(),
+    });
+  }
+
+  notifyLerniqSync("DIRECT_MESSAGE", { studentKey: cleanKey, message: newMsg });
   return updated;
 };
 
+// Specialized Quiz Reminder
+export const sendQuizReminder = ({ studentId, studentName, studentEmail, quizTitle, teacherName = "Prof. Sarah Jenkins" }) => {
+  const text = `Quiz Reminder: Please attempt and complete your quiz "${quizTitle}". Log in and click 'Quizzes' to begin.`;
+  
+  // Deliver to student ID
+  sendDirectMessage(studentId, {
+    senderRole: "teacher",
+    senderName: teacherName,
+    text,
+    studentName: studentName || "Student",
+    type: "quiz_reminder",
+  });
+
+  // Also deliver to student email if different
+  if (studentEmail && String(studentEmail).toLowerCase() !== String(studentId).toLowerCase()) {
+    sendDirectMessage(studentEmail, {
+      senderRole: "teacher",
+      senderName: teacherName,
+      text,
+      studentName: studentName || "Student",
+      type: "quiz_reminder",
+    });
+  }
+
+  notifyLerniqSync("QUIZ_REMINDER_SENT", { studentId, studentEmail, quizTitle });
+};
+
 // ==========================================
-// TEACHER NOTES (UPLOAD & HISTORY & DELETE)
+// TEACHER NOTES
 // ==========================================
 const DEFAULT_NOTES = [
   {
@@ -291,6 +454,20 @@ export const uploadNote = ({ title, subject, module = "General", description, co
   };
   const updated = [newNote, ...current];
   localStorage.setItem(STORAGE_KEYS.NOTES, JSON.stringify(updated));
+
+  // Pop up for students
+  addStudentPopup({
+    id: `note-pop-${Date.now()}`,
+    type: "note",
+    title: `📝 New Notes Available: ${title}`,
+    message: description || `Prof. uploaded study notes for ${subject}. Click to view or download.`,
+    sender: "Prof. Sarah Jenkins",
+    link: "/student/lectures-notes",
+    linkText: "View Notes",
+    timestamp: Date.now(),
+  });
+
+  notifyLerniqSync("NOTE_UPLOADED", newNote);
   return updated;
 };
 
@@ -298,11 +475,12 @@ export const deleteNote = (id) => {
   const current = getUploadedNotes();
   const updated = current.filter((note) => note.id !== id);
   localStorage.setItem(STORAGE_KEYS.NOTES, JSON.stringify(updated));
+  notifyLerniqSync("NOTE_DELETED", { id });
   return updated;
 };
 
 // ==========================================
-// TEACHER LECTURES (UPLOAD & HISTORY & DELETE)
+// TEACHER LECTURES
 // ==========================================
 const DEFAULT_LECTURES = [
   {
@@ -371,6 +549,20 @@ export const uploadLecture = ({ title, subject, duration = "35 min", videoEmbedU
   };
   const updated = [newLecture, ...current];
   localStorage.setItem(STORAGE_KEYS.LECTURES, JSON.stringify(updated));
+
+  // Pop up for students
+  addStudentPopup({
+    id: `lec-pop-${Date.now()}`,
+    type: "lecture",
+    title: `🎥 New Lecture Uploaded: ${title}`,
+    message: description || `A new video lecture has been added to ${subject}.`,
+    sender: "Prof. Sarah Jenkins",
+    link: "/student/lectures-notes",
+    linkText: "Watch Lecture",
+    timestamp: Date.now(),
+  });
+
+  notifyLerniqSync("LECTURE_UPLOADED", newLecture);
   return updated;
 };
 
@@ -378,94 +570,93 @@ export const deleteLecture = (id) => {
   const current = getUploadedLectures();
   const updated = current.filter((lec) => lec.id !== id);
   localStorage.setItem(STORAGE_KEYS.LECTURES, JSON.stringify(updated));
+  notifyLerniqSync("LECTURE_DELETED", { id });
   return updated;
 };
 
 // ==========================================
-// QUIZZES CONDUCTED & STUDENT ATTEMPT ANALYTICS
+// QUIZZES CONDUCTED & STUDENT ATTEMPTS
 // ==========================================
 const DEFAULT_QUIZZES = [
   {
     id: "quiz-101",
     title: "AI Search Algorithms & Heuristics Quiz",
     subject: "Artificial Intelligence",
-    questionCount: 10,
+    questionCount: 4,
     passingScore: 60,
     timeLimit: 15,
+    difficulty: "Medium",
     date: "Oct 25, 2026",
     questions: [
       {
         question: "Which search algorithm is guaranteed to find the shallowest goal node in an unweighted tree?",
         options: ["Depth-First Search (DFS)", "Breadth-First Search (BFS)", "Depth-Limited Search", "Greedy Best-First Search"],
         answerIndex: 1,
+        explanation: "BFS explores level by level, ensuring the shallowest solution is found first.",
       },
       {
         question: "For A* graph search to guarantee optimality, the heuristic function h(n) must be:",
         options: ["Consistent (Monotone)", "Inadmissible", "Non-negative and strictly zero", "Always greater than true cost"],
         answerIndex: 0,
+        explanation: "Consistency guarantees that optimal path to any visited node has already been found without reopening.",
+      },
+      {
+        question: "What is the worst-case space complexity of Depth-First Search with branching factor b and depth m?",
+        options: ["O(b * m)", "O(b^m)", "O(m^b)", "O(1)"],
+        answerIndex: 0,
+        explanation: "DFS only stores a single path from the root to a leaf along with unexpanded sibling nodes: O(b * m).",
+      },
+      {
+        question: "In Minimax decision trees, what does Alpha-Beta pruning achieve?",
+        options: ["Prunes branches that cannot influence the final decision", "Finds approximate suboptimal moves faster", "Eliminates all opponent leaf nodes", "Reduces tree depth by half unconditionally"],
+        answerIndex: 0,
+        explanation: "Alpha-beta pruning yields the exact same decision as standard Minimax while skipping irrelevant subtrees.",
       },
     ],
     studentRoster: [
-      { studentId: "std_101", name: "Alex Smith", email: "alexsmith@lerniq.edu", attempted: true, score: 90, totalQuestions: 10, completedAt: "Oct 26, 2026, 04:15 PM" },
-      { studentId: "std_102", name: "Marcus Chen", email: "marcus.chen@lerniq.edu", attempted: true, score: 80, totalQuestions: 10, completedAt: "Oct 26, 2026, 05:40 PM" },
-      { studentId: "std_103", name: "Elena Rostova", email: "elena.r@lerniq.edu", attempted: true, score: 100, totalQuestions: 10, completedAt: "Oct 27, 2026, 10:12 AM" },
-      { studentId: "std_104", name: "Devin Taylor", email: "devin.t@lerniq.edu", attempted: false, score: 0, totalQuestions: 10, completedAt: null },
-      { studentId: "std_105", name: "Priya Sharma", email: "priya.s@lerniq.edu", attempted: true, score: 70, totalQuestions: 10, completedAt: "Oct 27, 2026, 03:20 PM" },
-      { studentId: "std_106", name: "Lucas Vance", email: "lucas.v@lerniq.edu", attempted: false, score: 0, totalQuestions: 10, completedAt: null },
-      { studentId: "std_107", name: "Sophia Miller", email: "sophia.m@lerniq.edu", attempted: true, score: 80, totalQuestions: 10, completedAt: "Oct 28, 2026, 01:10 PM" },
-      { studentId: "std_108", name: "Hassan Ali", email: "hassan.a@lerniq.edu", attempted: false, score: 0, totalQuestions: 10, completedAt: null },
+      { studentId: "std_101", name: "Alex Smith", email: "alexsmith@lerniq.edu", attempted: true, score: 4, totalQuestions: 4, percentage: 100, completedAt: "Oct 26, 2026, 04:15 PM" },
+      { studentId: "std_102", name: "Marcus Chen", email: "marcus.chen@lerniq.edu", attempted: true, score: 3, totalQuestions: 4, percentage: 75, completedAt: "Oct 26, 2026, 05:40 PM" },
+      { studentId: "std_103", name: "Elena Rostova", email: "elena.r@lerniq.edu", attempted: true, score: 4, totalQuestions: 4, percentage: 100, completedAt: "Oct 27, 2026, 10:12 AM" },
+      { studentId: "std_104", name: "Devin Taylor", email: "devin.t@lerniq.edu", attempted: false, score: 0, totalQuestions: 4, percentage: 0, completedAt: null },
+      { studentId: "std_105", name: "Priya Sharma", email: "priya.s@lerniq.edu", attempted: true, score: 3, totalQuestions: 4, percentage: 75, completedAt: "Oct 27, 2026, 03:20 PM" },
+      { studentId: "std_106", name: "Lucas Vance", email: "lucas.v@lerniq.edu", attempted: false, score: 0, totalQuestions: 4, percentage: 0, completedAt: null },
+      { studentId: "std_107", name: "Sophia Miller", email: "sophia.m@lerniq.edu", attempted: true, score: 3, totalQuestions: 4, percentage: 75, completedAt: "Oct 28, 2026, 01:10 PM" },
+      { studentId: "std_108", name: "Hassan Ali", email: "hassan.a@lerniq.edu", attempted: false, score: 0, totalQuestions: 4, percentage: 0, completedAt: null },
     ],
   },
   {
     id: "quiz-102",
     title: "Neural Networks & Backprop Midterm Check",
     subject: "Deep Learning",
-    questionCount: 8,
+    questionCount: 3,
     passingScore: 70,
     timeLimit: 20,
+    difficulty: "Difficult",
     date: "Oct 27, 2026",
     questions: [
       {
         question: "What problem occurs during deep network training when gradients vanish through sigmoid activations?",
         options: ["Exploding Weights", "Vanishing Gradient", "Overfitting to Noise", "Dead Neuron Effect"],
         answerIndex: 1,
+        explanation: "Sigmoids have maximum derivative of 0.25, leading to exponentially decaying gradients in deep layers.",
       },
-    ],
-    studentRoster: [
-      { studentId: "std_101", name: "Alex Smith", email: "alexsmith@lerniq.edu", attempted: true, score: 75, totalQuestions: 8, completedAt: "Oct 28, 2026, 09:30 AM" },
-      { studentId: "std_102", name: "Marcus Chen", email: "marcus.chen@lerniq.edu", attempted: true, score: 88, totalQuestions: 8, completedAt: "Oct 28, 2026, 11:45 AM" },
-      { studentId: "std_103", name: "Elena Rostova", email: "elena.r@lerniq.edu", attempted: false, score: 0, totalQuestions: 8, completedAt: null },
-      { studentId: "std_104", name: "Devin Taylor", email: "devin.t@lerniq.edu", attempted: false, score: 0, totalQuestions: 8, completedAt: null },
-      { studentId: "std_105", name: "Priya Sharma", email: "priya.s@lerniq.edu", attempted: true, score: 63, totalQuestions: 8, completedAt: "Oct 28, 2026, 02:10 PM" },
-      { studentId: "std_106", name: "Lucas Vance", email: "lucas.v@lerniq.edu", attempted: true, score: 75, totalQuestions: 8, completedAt: "Oct 28, 2026, 04:05 PM" },
-      { studentId: "std_107", name: "Sophia Miller", email: "sophia.m@lerniq.edu", attempted: false, score: 0, totalQuestions: 8, completedAt: null },
-      { studentId: "std_108", name: "Hassan Ali", email: "hassan.a@lerniq.edu", attempted: true, score: 88, totalQuestions: 8, completedAt: "Oct 28, 2026, 06:15 PM" },
-    ],
-  },
-  {
-    id: "quiz-103",
-    title: "Database Indexing & Query Plans Assessment",
-    subject: "Database Systems",
-    questionCount: 10,
-    passingScore: 60,
-    timeLimit: 15,
-    date: "Oct 28, 2026",
-    questions: [
       {
-        question: "In a B+ Tree, where are actual record pointers stored?",
-        options: ["Only in leaf nodes", "Only in root node", "Evenly distributed across all levels", "In inverted index tables"],
+        question: "Which optimizer maintains running averages of both the gradients and the second moments of the gradients?",
+        options: ["Adam (Adaptive Moment Estimation)", "Vanilla Stochastic Gradient Descent", "Momentum SGD", "Adagrad"],
         answerIndex: 0,
+        explanation: "Adam calculates adaptive learning rates from estimates of first and second moments of the gradients.",
+      },
+      {
+        question: "Which activation function is defined as f(x) = max(0, x)?",
+        options: ["ReLU", "Softmax", "GELU", "Tanh"],
+        answerIndex: 0,
+        explanation: "ReLU outputs x if positive, else zero, mitigating the vanishing gradient problem.",
       },
     ],
     studentRoster: [
-      { studentId: "std_101", name: "Alex Smith", email: "alexsmith@lerniq.edu", attempted: true, score: 90, totalQuestions: 10, completedAt: "Oct 29, 2026, 10:15 AM" },
-      { studentId: "std_102", name: "Marcus Chen", email: "marcus.chen@lerniq.edu", attempted: true, score: 70, totalQuestions: 10, completedAt: "Oct 29, 2026, 11:20 AM" },
-      { studentId: "std_103", name: "Elena Rostova", email: "elena.r@lerniq.edu", attempted: true, score: 100, totalQuestions: 10, completedAt: "Oct 29, 2026, 01:05 PM" },
-      { studentId: "std_104", name: "Devin Taylor", email: "devin.t@lerniq.edu", attempted: true, score: 80, totalQuestions: 10, completedAt: "Oct 29, 2026, 02:45 PM" },
-      { studentId: "std_105", name: "Priya Sharma", email: "priya.s@lerniq.edu", attempted: false, score: 0, totalQuestions: 10, completedAt: null },
-      { studentId: "std_106", name: "Lucas Vance", email: "lucas.v@lerniq.edu", attempted: false, score: 0, totalQuestions: 10, completedAt: null },
-      { studentId: "std_107", name: "Sophia Miller", email: "sophia.m@lerniq.edu", attempted: true, score: 90, totalQuestions: 10, completedAt: "Oct 29, 2026, 04:30 PM" },
-      { studentId: "std_108", name: "Hassan Ali", email: "hassan.a@lerniq.edu", attempted: false, score: 0, totalQuestions: 10, completedAt: null },
+      { studentId: "std_101", name: "Alex Smith", email: "alexsmith@lerniq.edu", attempted: true, score: 2, totalQuestions: 3, percentage: 67, completedAt: "Oct 28, 2026, 09:30 AM" },
+      { studentId: "std_102", name: "Marcus Chen", email: "marcus.chen@lerniq.edu", attempted: true, score: 3, totalQuestions: 3, percentage: 100, completedAt: "Oct 28, 2026, 11:45 AM" },
+      { studentId: "std_104", name: "Devin Taylor", email: "devin.t@lerniq.edu", attempted: false, score: 0, totalQuestions: 3, percentage: 0, completedAt: null },
     ],
   },
 ];
@@ -483,34 +674,63 @@ export const getTeacherQuizzes = () => {
   }
 };
 
-export const uploadQuiz = ({ title, subject, questionCount = 5, passingScore = 60, timeLimit = 15, questions = [] }) => {
+export const uploadQuiz = ({
+  title,
+  subject,
+  questionCount = 5,
+  passingScore = 60,
+  timeLimit = 15,
+  difficulty = "Medium",
+  questions = [],
+}) => {
   const current = getTeacherQuizzes();
+  const actualQuestions = questions.length > 0 ? questions : [
+    {
+      question: `Sample question on ${title}: What is the primary objective of this module?`,
+      options: ["Core foundational understanding", "Memory overhead reduction", "Heuristic optimization", "Real-time synchronization"],
+      answerIndex: 0,
+      explanation: "Foundational conceptual mastery is required for this module.",
+    },
+  ];
+
   const newQuiz = {
     id: `quiz-${Date.now()}`,
     title,
     subject: subject || "General",
-    questionCount: questions.length || questionCount,
+    questionCount: actualQuestions.length,
     passingScore: Number(passingScore) || 60,
-    timeLimit: Number(timeLimit) || 15,
+    timeLimit: timeLimit === null || timeLimit === 0 ? null : (Number(timeLimit) || 15),
+    difficulty,
     date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    questions: questions.length > 0 ? questions : [
-      {
-        question: `Sample question on ${title}: What is the primary objective of this module?`,
-        options: ["Core foundational understanding", "Memory overhead reduction", "Heuristic optimization", "Real-time synchronization"],
-        answerIndex: 0,
-      },
-    ],
-    studentRoster: [
-      { studentId: "std_101", name: "Alex Smith", email: "alexsmith@lerniq.edu", attempted: false, score: 0, totalQuestions: questions.length || questionCount, completedAt: null },
-      { studentId: "std_102", name: "Marcus Chen", email: "marcus.chen@lerniq.edu", attempted: false, score: 0, totalQuestions: questions.length || questionCount, completedAt: null },
-      { studentId: "std_103", name: "Elena Rostova", email: "elena.r@lerniq.edu", attempted: false, score: 0, totalQuestions: questions.length || questionCount, completedAt: null },
-      { studentId: "std_104", name: "Devin Taylor", email: "devin.t@lerniq.edu", attempted: false, score: 0, totalQuestions: questions.length || questionCount, completedAt: null },
-      { studentId: "std_105", name: "Priya Sharma", email: "priya.s@lerniq.edu", attempted: false, score: 0, totalQuestions: questions.length || questionCount, completedAt: null },
-      { studentId: "std_106", name: "Lucas Vance", email: "lucas.v@lerniq.edu", attempted: false, score: 0, totalQuestions: questions.length || questionCount, completedAt: null },
-    ],
+    questions: actualQuestions,
+    studentRoster: DEFAULT_STUDENTS_LIST.map((s) => ({
+      studentId: s.studentId || s.id,
+      name: s.name,
+      email: s.email,
+      attempted: false,
+      score: 0,
+      totalQuestions: actualQuestions.length,
+      percentage: 0,
+      completedAt: null,
+    })),
   };
+
   const updated = [newQuiz, ...current];
   localStorage.setItem(STORAGE_KEYS.QUIZZES, JSON.stringify(updated));
+
+  // Pop up notification for all students
+  addStudentPopup({
+    id: `quiz-pop-${Date.now()}`,
+    type: "quiz",
+    title: `🎯 New Quiz Uploaded: ${title}`,
+    message: `${actualQuestions.length} Questions (${difficulty}) • ${newQuiz.timeLimit ? `${newQuiz.timeLimit} mins` : "Untimed"}`,
+    sender: "Prof. Sarah Jenkins",
+    link: "/student/quizzes",
+    linkText: "Solve Quiz Now",
+    timestamp: Date.now(),
+  });
+
+  notifyLerniqSync("QUIZ_UPLOADED", newQuiz);
   return updated;
 };
 
@@ -518,5 +738,220 @@ export const deleteQuiz = (id) => {
   const current = getTeacherQuizzes();
   const updated = current.filter((q) => q.id !== id);
   localStorage.setItem(STORAGE_KEYS.QUIZZES, JSON.stringify(updated));
+  notifyLerniqSync("QUIZ_DELETED", { id });
   return updated;
+};
+
+// ==========================================
+// STUDENT QUIZ SUBMISSION & ACTUAL RESULT TRACKING
+// ==========================================
+export const recordStudentQuizAttempt = ({
+  quizId,
+  studentId,
+  studentName,
+  studentEmail,
+  score,
+  totalQuestions,
+  answers = [],
+}) => {
+  const percentage = Math.round((score / totalQuestions) * 100);
+  const completedAt = new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  // 1. Update in teacher quiz list (studentRoster)
+  const quizzes = getTeacherQuizzes();
+  const updatedQuizzes = quizzes.map((q) => {
+    if (q.id === quizId) {
+      const roster = q.studentRoster || [];
+      const matchIdx = roster.findIndex(
+        (r) =>
+          String(r.studentId).toLowerCase() === String(studentId).toLowerCase() ||
+          String(r.email).toLowerCase() === String(studentEmail).toLowerCase()
+      );
+
+      const attemptRecord = {
+        studentId: studentId || "std_101",
+        name: studentName || "Student",
+        email: studentEmail || "student@lerniq.edu",
+        attempted: true,
+        score,
+        totalQuestions,
+        percentage,
+        completedAt,
+        answers,
+      };
+
+      let newRoster;
+      if (matchIdx >= 0) {
+        newRoster = [...roster];
+        newRoster[matchIdx] = attemptRecord;
+      } else {
+        newRoster = [attemptRecord, ...roster];
+      }
+
+      return { ...q, studentRoster: newRoster };
+    }
+    return q;
+  });
+
+  localStorage.setItem(STORAGE_KEYS.QUIZZES, JSON.stringify(updatedQuizzes));
+
+  // 2. Save student's personal record
+  try {
+    const studentAttemptsKey = `${STORAGE_KEYS.STUDENT_ATTEMPTS}_${String(studentId || studentEmail).toLowerCase()}`;
+    const myAttempts = JSON.parse(localStorage.getItem(studentAttemptsKey) || "{}");
+    myAttempts[quizId] = {
+      quizId,
+      score,
+      totalQuestions,
+      percentage,
+      completedAt,
+      answers,
+    };
+    localStorage.setItem(studentAttemptsKey, JSON.stringify(myAttempts));
+  } catch (err) {
+    console.warn("Could not save personal attempt:", err);
+  }
+
+  notifyLerniqSync("QUIZ_ATTEMPT_SUBMITTED", {
+    quizId,
+    studentId,
+    studentName,
+    studentEmail,
+    score,
+    percentage,
+  });
+
+  return { success: true, score, percentage, completedAt };
+};
+
+export const getStudentQuizAttempt = (quizId, studentKey) => {
+  try {
+    const key = `${STORAGE_KEYS.STUDENT_ATTEMPTS}_${String(studentKey).toLowerCase()}`;
+    const myAttempts = JSON.parse(localStorage.getItem(key) || "{}");
+    if (myAttempts[quizId]) return myAttempts[quizId];
+
+    // Fallback: check quiz studentRoster directly
+    const quizzes = getTeacherQuizzes();
+    const quiz = quizzes.find((q) => q.id === quizId);
+    if (quiz && quiz.studentRoster) {
+      const record = quiz.studentRoster.find(
+        (r) =>
+          r.attempted &&
+          (String(r.studentId).toLowerCase() === String(studentKey).toLowerCase() ||
+            String(r.email).toLowerCase() === String(studentKey).toLowerCase())
+      );
+      if (record) return record;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+// ==========================================
+// CLASSROOM ENTRY NOTIFICATIONS (FOR TEACHERS)
+// ==========================================
+export const logClassroomEntry = ({ studentId, studentName, studentEmail }) => {
+  try {
+    const entries = getClassroomEntries();
+    const newEntry = {
+      id: `entry-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      studentId: studentId || "std_unknown",
+      studentName: studentName || "Student",
+      studentEmail: studentEmail || "student@lerniq.edu",
+      timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+      date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      read: false,
+    };
+    const updated = [newEntry, ...entries].slice(0, 30); // keep last 30 entries
+    localStorage.setItem(STORAGE_KEYS.CLASSROOM_ENTRIES, JSON.stringify(updated));
+    notifyLerniqSync("STUDENT_ENTERED_CLASS", newEntry);
+    return updated;
+  } catch {
+    return [];
+  }
+};
+
+export const getClassroomEntries = () => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.CLASSROOM_ENTRIES);
+    if (!data) return [];
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+};
+
+export const markClassroomEntriesAsRead = () => {
+  try {
+    const entries = getClassroomEntries().map((e) => ({ ...e, read: true }));
+    localStorage.setItem(STORAGE_KEYS.CLASSROOM_ENTRIES, JSON.stringify(entries));
+    notifyLerniqSync("CLASSROOM_ENTRIES_READ");
+    return entries;
+  } catch {
+    return [];
+  }
+};
+
+// ==========================================
+// POP-UP NOTIFICATIONS (FOR STUDENTS)
+// ==========================================
+export const addStudentPopup = (popupData) => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.STUDENT_POPUPS);
+    const list = data ? JSON.parse(data) : [];
+    const updated = [popupData, ...list].slice(0, 20);
+    localStorage.setItem(STORAGE_KEYS.STUDENT_POPUPS, JSON.stringify(updated));
+    notifyLerniqSync("NEW_STUDENT_POPUP", popupData);
+  } catch (err) {
+    console.warn("Popup save error:", err);
+  }
+};
+
+export const getStudentPopups = (studentKey = null) => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.STUDENT_POPUPS);
+    if (!data) return [];
+    const list = JSON.parse(data);
+    const dismissed = getDismissedPopupIds();
+
+    return list.filter((p) => {
+      if (dismissed.includes(p.id)) return false;
+      if (p.targetStudentKey && studentKey) {
+        const cleanT = String(p.targetStudentKey).toLowerCase();
+        const cleanS = String(studentKey).toLowerCase();
+        return cleanT === cleanS || cleanT === "default_student";
+      }
+      return true; // broadcast popups
+    });
+  } catch {
+    return [];
+  }
+};
+
+export const getDismissedPopupIds = () => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.DISMISSED_POPUPS);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const dismissStudentPopup = (popupId) => {
+  try {
+    const current = getDismissedPopupIds();
+    if (!current.includes(popupId)) {
+      const updated = [...current, popupId];
+      localStorage.setItem(STORAGE_KEYS.DISMISSED_POPUPS, JSON.stringify(updated));
+    }
+  } catch (err) {
+    console.warn("Dismiss popup error:", err);
+  }
 };

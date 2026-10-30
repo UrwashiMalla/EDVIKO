@@ -88,4 +88,5 @@ export const teacherApi = {
   getStudentQuizResults: (studentId) => apiRequest(`/api/teachers/students/${studentId}/quiz-results`),
   getDocuments: () => apiRequest("/api/teachers/documents"),
   getQuizResults: () => apiRequest("/api/teachers/quiz-results"),
+  removeStudent: (studentId) => apiRequest(`/api/teachers/students/${studentId}`, { method: "DELETE" }),
 };

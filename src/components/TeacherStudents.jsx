@@ -84,12 +84,21 @@ function TeacherStudents() {
     setStudentToRemove(student);
   };
 
-  const handleConfirmRemove = () => {
+  const handleConfirmRemove = async () => {
     if (!studentToRemove) return;
-    const updated = addRemovedStudentId(studentToRemove.id);
+    const updated = addRemovedStudentId(studentToRemove.id, studentToRemove.email);
     setRemovedIds(updated);
     setLastRemoved(studentToRemove);
-    showToast(`Removed "${studentToRemove.name}" from your active roster.`);
+
+    try {
+      if (studentToRemove.id && !String(studentToRemove.id).startsWith("std_") && studentToRemove.id !== "default_student") {
+        await teacherApi.removeStudent(studentToRemove.id);
+      }
+    } catch (err) {
+      console.warn("Backend remove student:", err.message);
+    }
+
+    showToast(`Permanently removed "${studentToRemove.name}". They cannot log in again with ${studentToRemove.email}.`);
     setStudentToRemove(null);
   };
 
@@ -668,7 +677,7 @@ function TeacherStudents() {
             >
               <span>💡</span>
               <span>
-                The student will be removed from your active student list. You can restore them anytime via the <strong>Removed Students</strong> button.
+                <strong>Notice:</strong> Once removed, this student cannot log in again with the email (<strong>{studentToRemove.email}</strong>). You can also view past removed students in the <strong>Removed Students</strong> tab.
               </span>
             </div>
 

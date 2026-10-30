@@ -78,6 +78,12 @@ const registerStudent = async (req, res, next) => {
     const normalizedEmail = finalEmail.toLowerCase().trim();
     const existing = await User.findOne({ email: normalizedEmail });
     if (existing) {
+      if (existing.isRemoved) {
+        return res.status(403).json({
+          success: false,
+          message: "Access Denied: This account was removed by the instructor and cannot be registered or used again with this email.",
+        });
+      }
       return res.status(400).json({
         success: false,
         message: "This Username is already taken. Please choose another.",
@@ -248,6 +254,13 @@ const loginStudent = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: "Invalid credentials.",
+      });
+    }
+
+    if (user.isRemoved) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: You have been removed from the class by your teacher and cannot log in again with this email.",
       });
     }
 

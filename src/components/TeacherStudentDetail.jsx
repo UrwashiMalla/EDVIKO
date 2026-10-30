@@ -32,14 +32,23 @@ function TeacherStudentDetail() {
     return list.includes(String(effectiveStudentId));
   });
 
-  const handleConfirmRemove = () => {
-    addRemovedStudentId(effectiveStudentId);
+  const handleConfirmRemove = async () => {
+    addRemovedStudentId(effectiveStudentId, studentData?.student?.email);
     setIsRemoved(true);
     setShowRemoveConfirm(false);
-    showToast(`Removed ${studentData?.student?.name || "student"} from active roster.`);
+
+    try {
+      if (effectiveStudentId && !String(effectiveStudentId).startsWith("std_") && effectiveStudentId !== "default_student") {
+        await teacherApi.removeStudent(effectiveStudentId);
+      }
+    } catch (err) {
+      console.warn("Backend remove student error:", err.message);
+    }
+
+    showToast(`Permanently removed ${studentData?.student?.name || "student"}. They cannot log in again with this email.`);
     setTimeout(() => {
       navigate("/teacher/students");
-    }, 1200);
+    }, 1500);
   };
 
   const handleRestore = () => {
@@ -595,7 +604,7 @@ function TeacherStudentDetail() {
             >
               <span>💡</span>
               <span>
-                You will be redirected back to the My Students page. You can restore this student anytime from the Removed Students list.
+                Notice: Once removed, this student will NOT be able to log in again with this email address.
               </span>
             </div>
 

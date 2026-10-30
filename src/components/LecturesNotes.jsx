@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { getUploadedNotes, getUploadedLectures } from "../services/frontendStorage";
+import { getUploadedNotes, getUploadedLectures, onLerniqSync } from "../services/frontendStorage";
 import Navbar from "./Navbar";
 import "./LecturesNotes.css";
 
@@ -260,7 +260,7 @@ function LecturesNotes() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeModalItem, setActiveModalItem] = useState(null);
 
-  useEffect(() => {
+  const loadMaterials = () => {
     const uploadedNotes = getUploadedNotes().map((n) => ({
       id: n.id,
       type: "note",
@@ -288,10 +288,23 @@ function LecturesNotes() {
       content: l.description,
     }));
 
-    const combined = [...uploadedLecs, ...uploadedNotes];
-    const existingIds = new Set(combined.map((c) => c.id));
-    const fallbackStatic = TEACHER_MATERIALS.filter((m) => !existingIds.has(m.id));
-    setAllMaterials([...combined, ...fallbackStatic]);
+    // Strictly reflect live uploaded notes and lectures (deletions are immediately removed!)
+    setAllMaterials([...uploadedLecs, ...uploadedNotes]);
+  };
+
+  useEffect(() => {
+    loadMaterials();
+    const unsubscribe = onLerniqSync((detail) => {
+      if (
+        detail.type === "NOTE_UPLOADED" ||
+        detail.type === "NOTE_DELETED" ||
+        detail.type === "LECTURE_UPLOADED" ||
+        detail.type === "LECTURE_DELETED"
+      ) {
+        loadMaterials();
+      }
+    });
+    return unsubscribe;
   }, []);
 
   const subjects = [

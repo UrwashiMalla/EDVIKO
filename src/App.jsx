@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { AuthProvider } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 import RoleSelection from "./components/RoleSelection";
 import StudentLogin from "./components/StudentLogin";
@@ -12,6 +13,7 @@ import LearningWorkspace from "./components/LearningWorkspace";
 import StudentDocuments from "./components/StudentDocuments";
 import AILearningResults from "./components/AILearningResults";
 import SmartMCQQuiz from "./components/SmartMCQQuiz";
+import StudentQuizzes from "./components/StudentQuizzes";
 import StudentProfile from "./components/StudentProfile";
 import LecturesNotes from "./components/LecturesNotes";
 import AIChatbot from "./components/AIChatbot";
@@ -30,6 +32,7 @@ function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+        <ErrorBoundary>
         <Router>
         <Routes>
           {/* Public Landing & Role Selection */}
@@ -77,6 +80,14 @@ function App() {
             }
           />
 
+                    <Route
+            path="/student/quizzes"
+            element={
+              <ProtectedRoute role="student">
+                <StudentQuizzes />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/student/quiz/:id"
             element={
@@ -195,6 +206,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
+      </ErrorBoundary>
       </ToastProvider>
     </AuthProvider>
   );

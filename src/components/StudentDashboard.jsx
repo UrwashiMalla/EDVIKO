@@ -1,5 +1,6 @@
 import {
   motion,
+  AnimatePresence,
   useMotionValue,
   useSpring,
   useTransform,
@@ -13,6 +14,9 @@ import {
   getDirectMessages,
   sendDirectMessage,
   getInstitutionName,
+  getStudentPopups,
+  dismissStudentPopup,
+  onLerniqSync,
 } from "../services/frontendStorage";
 import Navbar from "./Navbar";
 import studentImage from "../assets/student/student.png";
@@ -32,6 +36,7 @@ function StudentDashboard() {
   const [directMessages, setDirectMessages] = useState([]);
   const [messageInput, setMessageInput] = useState("");
   const [toastNotice, setToastNotice] = useState("");
+  const [activePopup, setActivePopup] = useState(null);
   const messagesEndRef = useRef(null);
 
   const studentKey = user?.id || user?._id || "default_student";
@@ -51,6 +56,30 @@ function StudentDashboard() {
     fetchDashboard();
     setBroadcasts(getTeacherBroadcasts());
     setDirectMessages(getDirectMessages(studentKey));
+
+    const initialPopups = getStudentPopups(studentKey);
+    if (initialPopups.length > 0) {
+      setActivePopup(initialPopups[0]);
+    }
+
+    const unsubscribe = onLerniqSync((detail) => {
+      if (
+        detail.type === "BROADCAST_CREATED" ||
+        detail.type === "NOTE_UPLOADED" ||
+        detail.type === "LECTURE_UPLOADED" ||
+        detail.type === "QUIZ_UPLOADED" ||
+        detail.type === "NEW_STUDENT_POPUP" ||
+        detail.type === "DIRECT_MESSAGE"
+      ) {
+        const updated = getStudentPopups(studentKey);
+        if (updated.length > 0) {
+          setActivePopup(updated[0]);
+        }
+        setBroadcasts(getTeacherBroadcasts());
+        setDirectMessages(getDirectMessages(studentKey));
+      }
+    });
+    return unsubscribe;
   }, [studentKey]);
 
   useEffect(() => {
@@ -61,6 +90,12 @@ function StudentDashboard() {
       }, 100);
     }
   }, [showMessageTeacherModal, studentKey]);
+
+  const handleDismissPopup = (popupId) => {
+    dismissStudentPopup(popupId);
+    const remaining = getStudentPopups(studentKey).filter((p) => p.id !== popupId);
+    setActivePopup(remaining.length > 0 ? remaining[0] : null);
+  };
 
   const handleSendDirectMessage = (e) => {
     e.preventDefault();
@@ -169,6 +204,29 @@ function StudentDashboard() {
 
           {/* QUICK ACTION BUTTONS */}
           <motion.div style={{ marginTop: "24px", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+            <motion.button
+              onClick={() => navigate("/student/quizzes")}
+              whileHover={{ scale: 1.03, y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              style={{
+                padding: "13px 20px",
+                background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                color: "#fff",
+                border: "none",
+                borderRadius: "14px",
+                fontWeight: "700",
+                fontSize: "14px",
+                cursor: "pointer",
+                boxShadow: "0 10px 25px -5px rgba(16, 185, 129, 0.4)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <span>🎯 Take Class Quizzes</span>
+              <span>→</span>
+            </motion.button>
+
             <motion.button
               onClick={() => navigate("/student/workspace")}
               whileHover={{ scale: 1.03, y: -2 }}
@@ -558,7 +616,7 @@ function StudentDashboard() {
               <div className="feature-icon">?</div>
               <h3>Interactive Quizzes</h3>
               <p>Learn from every question with instant AI explanations for incorrect answers.</p>
-              <button className="try-button">Start Quiz →</button>
+              <button className="try-button" onClick={() => navigate("/student/quizzes")}>Solve Quizzes →</button>
             </div>
           </motion.div>
 
@@ -582,6 +640,84 @@ function StudentDashboard() {
           </motion.div>
         </div>
       </section>
+
+      
+      {/* ================= REAL-TIME POPUP NOTIFICATION FOR STUDENT ================= */}
+      <AnimatePresence>
+        {activePopup && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.92 }}
+            style={{
+              position: "fixed",
+              bottom: "28px",
+              right: "28px",
+              maxWidth: "420px",
+              background: "#ffffff",
+              borderRadius: "20px",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.22)",
+              border: "2px solid #a78bfa",
+              padding: "20px",
+              zIndex: 999999,
+              animation: "fadeIn 0.3s ease",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+              <div style={{ fontWeight: "800", fontSize: "15px", color: "#1e293b", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>{activePopup.title}</span>
+              </div>
+              <button
+                onClick={() => handleDismissPopup(activePopup.id)}
+                style={{
+                  background: "#f1f5f9",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: "26px",
+                  height: "26px",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  color: "#64748b",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginLeft: "8px",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <p style={{ fontSize: "13px", color: "#475569", lineHeight: 1.5, margin: "0 0 14px 0" }}>
+              {activePopup.message}
+            </p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "8px", borderTop: "1px solid #f1f5f9" }}>
+              <small style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "600" }}>
+                Instructor: {activePopup.sender || "Faculty"}
+              </small>
+              <button
+                onClick={() => {
+                  const link = activePopup.link;
+                  handleDismissPopup(activePopup.id);
+                  if (link) navigate(link);
+                }}
+                style={{
+                  padding: "8px 16px",
+                  background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "10px",
+                  fontWeight: "700",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 12px rgba(124, 58, 237, 0.25)",
+                }}
+              >
+                {activePopup.linkText || "View Now"} →
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ================= MODAL 1: TEACHER ANNOUNCEMENTS / MESSAGES ================= */}
       {showAnnouncementsModal && (

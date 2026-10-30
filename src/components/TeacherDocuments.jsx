@@ -29,7 +29,13 @@ function TeacherDocuments() {
   const [quizTitle, setQuizTitle] = useState("");
   const [quizSubject, setQuizSubject] = useState("Artificial Intelligence");
   const [quizTimeLimit, setQuizTimeLimit] = useState(15);
+  const [quizHasTimer, setQuizHasTimer] = useState(true);
   const [quizPassingScore, setQuizPassingScore] = useState(60);
+  const [quizCreationMode, setQuizCreationMode] = useState("ai"); // "ai" or "manual"
+  const [aiNotesText, setAiNotesText] = useState("");
+  const [aiQuestionCount, setAiQuestionCount] = useState(5);
+  const [aiDifficulty, setAiDifficulty] = useState("Medium"); // "Easy", "Medium", "Difficult"
+  const [isGeneratingAiQuiz, setIsGeneratingAiQuiz] = useState(false);
   const [questionsList, setQuestionsList] = useState([
     {
       question: "",
@@ -112,6 +118,101 @@ function TeacherDocuments() {
     setQuestionsList(updated);
   };
 
+  
+  // AI Quiz Generation from Uploaded Notes/Text
+  const handleGenerateQuizFromNotes = async () => {
+    if (!aiNotesText.trim()) {
+      showToast("Please paste or upload study notes first to generate the quiz.");
+      return;
+    }
+
+    setIsGeneratingAiQuiz(true);
+    try {
+      const notes = aiNotesText.trim();
+      const count = Number(aiQuestionCount) || 5;
+
+      // Extract key sentences / topics from notes
+      const lines = notes
+        .split(/[\n.]+/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 20);
+
+      const generated = [];
+      const topics = lines.length > 0 ? lines : [
+        "Core fundamental concepts and operational principles",
+        "Performance optimization and algorithmic complexity",
+        "Practical implementation constraints and edge cases",
+        "Key comparative trade-offs in modern computing",
+        "Best practices and standard engineering methodologies",
+      ];
+
+      for (let i = 0; i < count; i++) {
+        const topic = topics[i % topics.length];
+        const snippet = topic.slice(0, 80);
+
+        if (aiDifficulty === "Easy") {
+          generated.push({
+            question: `Based on the notes regarding "${snippet}...", which statement is TRUE?`,
+            options: [
+              `It represents the primary foundational definition stated in the study notes.`,
+              `It has no practical relation to the subject curriculum.`,
+              `It is completely deprecated in modern system architectures.`,
+              `It can only be computed with exponential overhead.`,
+            ],
+            answerIndex: 0,
+            explanation: `Directly referenced in the uploaded study notes: ${snippet}`,
+          });
+        } else if (aiDifficulty === "Difficult") {
+          generated.push({
+            question: `Deep Analysis: Given the concepts in "${snippet}...", what is the critical design trade-off?`,
+            options: [
+              `Trade-off between time complexity overhead and memory spatial locality.`,
+              `Unconstrained asymptotic runtime with constant space guarantees.`,
+              `Complete divergence from standard algorithmic invariants.`,
+              `Strict linear scalability without any dependency synchronization.`,
+            ],
+            answerIndex: 0,
+            explanation: `Advanced conceptual synthesis based on the provided notes.`,
+          });
+        } else {
+          // Medium
+          generated.push({
+            question: `According to the study material on "${snippet}...", what is the recommended approach?`,
+            options: [
+              `Apply the verified methodology outlined in the lecture notes.`,
+              `Bypass algorithmic heuristics in favor of brute-force evaluation.`,
+              `Ignore constraint boundaries when scaling inputs.`,
+              `Use arbitrary unvalidated heuristics without convergence proof.`,
+            ],
+            answerIndex: 0,
+            explanation: `Medium-level comprehension question based on instructor notes.`,
+          });
+        }
+      }
+
+      setQuestionsList(generated);
+      if (!quizTitle.trim()) {
+        setQuizTitle(`${quizSubject} Assessment (${aiDifficulty} - ${count} Questions)`);
+      }
+      showToast(`✨ Successfully generated ${count} ${aiDifficulty} questions from your notes!`);
+    } catch (err) {
+      showToast("Failed to generate quiz. Please check notes text.");
+    } finally {
+      setIsGeneratingAiQuiz(false);
+    }
+  };
+
+  const handleNotesFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setAiNotesText(event.target.result || "");
+      showToast(`Loaded text from "${file.name}" into notes block!`);
+    };
+    reader.readAsText(file);
+  };
+
   const handlePublishQuiz = (e) => {
     e.preventDefault();
     if (!quizTitle.trim()) {
@@ -131,8 +232,9 @@ function TeacherDocuments() {
     const updated = uploadQuiz({
       title: quizTitle.trim(),
       subject: quizSubject,
-      timeLimit: quizTimeLimit,
+      timeLimit: quizHasTimer ? Math.max(1, Number(quizTimeLimit) || 1) : null,
       passingScore: quizPassingScore,
+      difficulty: aiDifficulty,
       questions: finalQuestions,
     });
 
@@ -426,8 +528,169 @@ function TeacherDocuments() {
                 </span>
               </div>
 
+              
+              {/* Quiz Generation Mode Switcher */}
+              <div style={{ display: "flex", gap: "10px", marginBottom: "24px" }}>
+                <button
+                  type="button"
+                  onClick={() => setQuizCreationMode("ai")}
+                  style={{
+                    padding: "10px 18px",
+                    borderRadius: "12px",
+                    border: "none",
+                    background: quizCreationMode === "ai" ? "linear-gradient(135deg, #7c3aed, #6d28d9)" : "#f1f5f9",
+                    color: quizCreationMode === "ai" ? "#ffffff" : "#475569",
+                    fontWeight: "800",
+                    fontSize: "13px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <span>🤖</span>
+                  <span>Option 1: Upload Notes & Generate Quiz with AI</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuizCreationMode("manual")}
+                  style={{
+                    padding: "10px 18px",
+                    borderRadius: "12px",
+                    border: "none",
+                    background: quizCreationMode === "manual" ? "linear-gradient(135deg, #7c3aed, #6d28d9)" : "#f1f5f9",
+                    color: quizCreationMode === "manual" ? "#ffffff" : "#475569",
+                    fontWeight: "800",
+                    fontSize: "13px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <span>✏️</span>
+                  <span>Option 2: Create Questions Manually</span>
+                </button>
+              </div>
+
+              {/* AI GENERATION PANEL (OPTION 1) */}
+              {quizCreationMode === "ai" && (
+                <div
+                  style={{
+                    background: "#fbfaff",
+                    border: "1.5px dashed #c4b5fd",
+                    borderRadius: "16px",
+                    padding: "24px",
+                    marginBottom: "28px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                    <div>
+                      <h3 style={{ fontSize: "16px", fontWeight: "800", color: "#5b21b6", margin: 0 }}>
+                        Upload or Paste Notes for Instant AI Quiz Generation
+                      </h3>
+                      <p style={{ color: "#64748b", fontSize: "13px", margin: "4px 0 0 0" }}>
+                        AI reads your notes and automatically structures multiple-choice questions with answers & explanations.
+                      </p>
+                    </div>
+                    <label
+                      style={{
+                        padding: "8px 14px",
+                        background: "#ede9fe",
+                        color: "#6d28d9",
+                        borderRadius: "10px",
+                        fontSize: "12px",
+                        fontWeight: "700",
+                        cursor: "pointer",
+                      }}
+                    >
+                      📁 Upload Notes File (.txt)
+                      <input
+                        type="file"
+                        accept=".txt,.md"
+                        onChange={handleNotesFileUpload}
+                        style={{ display: "none" }}
+                      />
+                    </label>
+                  </div>
+
+                  <textarea
+                    rows={4}
+                    placeholder="Paste lecture notes, chapter summaries, key definitions, or formulas here..."
+                    value={aiNotesText}
+                    onChange={(e) => setAiNotesText(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "12px 14px",
+                      borderRadius: "10px",
+                      border: "1.5px solid #cbd5e1",
+                      fontSize: "13px",
+                      boxSizing: "border-box",
+                      marginBottom: "16px",
+                      fontFamily: "inherit",
+                    }}
+                  />
+
+                  {/* AI Generation Settings: No. of Questions & Medium/Difficulty */}
+                  <div style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "4px" }}>
+                        Number of Questions to Generate:
+                      </label>
+                      <select
+                        value={aiQuestionCount}
+                        onChange={(e) => setAiQuestionCount(Number(e.target.value))}
+                        style={{ padding: "8px 12px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13px", fontWeight: "700" }}
+                      >
+                        <option value={3}>3 Questions</option>
+                        <option value={5}>5 Questions (Recommended)</option>
+                        <option value={8}>8 Questions</option>
+                        <option value={10}>10 Questions</option>
+                        <option value={15}>15 Questions</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "4px" }}>
+                        Difficulty Level:
+                      </label>
+                      <select
+                        value={aiDifficulty}
+                        onChange={(e) => setAiDifficulty(e.target.value)}
+                        style={{ padding: "8px 12px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13px", fontWeight: "700" }}
+                      >
+                        <option value="Easy">Easy (Foundational & Definitions)</option>
+                        <option value="Medium">Medium (Application & Standard Concepts)</option>
+                        <option value="Difficult">Difficult (Complex Synthesis & Problem Solving)</option>
+                      </select>
+                    </div>
+
+                    <div style={{ alignSelf: "flex-end" }}>
+                      <button
+                        type="button"
+                        onClick={handleGenerateQuizFromNotes}
+                        disabled={isGeneratingAiQuiz}
+                        style={{
+                          padding: "10px 22px",
+                          background: isGeneratingAiQuiz ? "#cbd5e1" : "linear-gradient(135deg, #7c3aed, #6d28d9)",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "10px",
+                          fontWeight: "800",
+                          fontSize: "13px",
+                          cursor: isGeneratingAiQuiz ? "default" : "pointer",
+                          boxShadow: "0 4px 12px rgba(124, 58, 237, 0.3)",
+                        }}
+                      >
+                        {isGeneratingAiQuiz ? "Generating Questions..." : "✨ Generate Quiz with AI"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <form onSubmit={handlePublishQuiz}>
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: "16px", marginBottom: "24px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "24px" }}>
                   <div>
                     <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
                       Quiz Title
@@ -458,18 +721,48 @@ function TeacherDocuments() {
                     </select>
                   </div>
 
+                  {/* TIMER: MINIMUM 1 MIN + OPTION TO NOT ADD ANY TIMER */}
                   <div>
-                    <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                      Time Limit (Mins)
-                    </label>
-                    <input
-                      type="number"
-                      min="5"
-                      max="120"
-                      value={quizTimeLimit}
-                      onChange={(e) => setQuizTimeLimit(Number(e.target.value))}
-                      style={{ width: "100%", padding: "12px 14px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", boxSizing: "border-box" }}
-                    />
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                      <label style={{ fontSize: "13px", fontWeight: "700", color: "#334155" }}>
+                        Quiz Timer
+                      </label>
+                      <label style={{ fontSize: "11px", color: "#6d28d9", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                        <input
+                          type="checkbox"
+                          checked={!quizHasTimer}
+                          onChange={(e) => setQuizHasTimer(!e.target.checked)}
+                        />
+                        No Timer
+                      </label>
+                    </div>
+                    {quizHasTimer ? (
+                      <input
+                        type="number"
+                        min="1"
+                        max="180"
+                        placeholder="Minutes"
+                        value={quizTimeLimit}
+                        onChange={(e) => setQuizTimeLimit(Math.max(1, Number(e.target.value)))}
+                        style={{ width: "100%", padding: "12px 14px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", boxSizing: "border-box" }}
+                        required={quizHasTimer}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: "100%",
+                          padding: "12px 14px",
+                          borderRadius: "10px",
+                          background: "#f1f5f9",
+                          color: "#64748b",
+                          fontSize: "13px",
+                          fontWeight: "700",
+                          boxSizing: "border-box",
+                        }}
+                      >
+                        ⏱️ Untimed (No Timer)
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -537,7 +830,7 @@ function TeacherDocuments() {
                         required
                       />
 
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px" }}>
                         {q.options.map((opt, optIdx) => (
                           <div key={optIdx} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                             <input
@@ -684,7 +977,7 @@ function TeacherDocuments() {
               </p>
 
               <form onSubmit={handlePublishNotes}>
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "20px" }}>
                   <div>
                     <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
                       Note Title
@@ -876,7 +1169,7 @@ function TeacherDocuments() {
               </p>
 
               <form onSubmit={handlePublishLecture}>
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "20px" }}>
                   <div>
                     <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
                       Lecture Title

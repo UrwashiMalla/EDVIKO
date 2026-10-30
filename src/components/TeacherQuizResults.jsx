@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { getTeacherQuizzes } from "../services/frontendStorage";
+import { getTeacherQuizzes, sendQuizReminder, onLerniqSync } from "../services/frontendStorage";
+import { useAuth } from "../context/useAuth";
 import Navbar from "./Navbar";
 
 function TeacherQuizResults() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [quizzes, setQuizzes] = useState([]);
   const [selectedQuizId, setSelectedQuizId] = useState("");
@@ -19,6 +21,11 @@ function TeacherQuizResults() {
   useEffect(() => {
     const list = getTeacherQuizzes();
     setQuizzes(list);
+    const unsubscribe = onLerniqSync((detail) => {
+      if (detail.type === "QUIZ_ATTEMPT_SUBMITTED" || detail.type === "QUIZ_UPLOADED" || detail.type === "QUIZ_DELETED") {
+        setQuizzes(getTeacherQuizzes());
+      }
+    });
     const paramId = searchParams.get("quizId");
     if (paramId && list.some((q) => q.id === paramId)) {
       setSelectedQuizId(paramId);
@@ -26,6 +33,18 @@ function TeacherQuizResults() {
       setSelectedQuizId(list[0].id);
     }
   }, [searchParams]);
+
+    const handleSendReminderToStudent = (std) => {
+    if (!selectedQuiz) return;
+    sendQuizReminder({
+      studentId: std.studentId || std.id,
+      studentName: std.name,
+      studentEmail: std.email,
+      quizTitle: selectedQuiz.title,
+      teacherName: user?.name || "Prof. Sarah Jenkins",
+    });
+    showToast(`📢 Reminder delivered directly to ${std.name} (${std.email})!`);
+  };
 
   const handleSelectQuiz = (id) => {
     setSelectedQuizId(id);
@@ -515,7 +534,7 @@ function TeacherQuizResults() {
                           </Link>
                         ) : (
                           <button
-                            onClick={() => showToast(`Reminder notification sent to ${std.name} (${std.email})!`)}
+                            onClick={() => handleSendReminderToStudent(std)}
                             style={{
                               padding: "6px 12px",
                               background: "#fffbeb",

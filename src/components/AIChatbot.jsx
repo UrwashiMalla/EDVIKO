@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useAuth } from "../context/useAuth";
 import { documentApi, aiApi } from "../services/api";
 import { isNonStudyQuery, getAcademicRefusalMessage } from "../utils/academicGuardrail";
+import { recognizeImageQuestion } from "../utils/imageOcrHelper";
 import Navbar from "./Navbar";
 import "./AIChatbot.css";
 
@@ -33,6 +34,9 @@ function AIChatbot() {
   const [selectedContext, setSelectedContext] = useState(searchParams.get("docId") || "general");
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+  const [imageOcrStatus, setImageOcrStatus] = useState("");
+  const fileInputRef = useRef(null);
 
   const initialGreeting = `Hello ${user?.name ? user.name.split(" ")[0] : "Learner"}! 👋 
 I'm your personal EDVIKO AI Tutor. Ask me any question, solve academic doubts, get concept explanations with examples, or practice for exams. 
@@ -78,6 +82,42 @@ You can speak to me in English, Hinglish, Hindi, or Marathi! How can I help you 
       setInputMessage(`Can you explain "${topicParam}" in simple terms with examples?`);
     }
   }, [searchParams]);
+
+  
+  // Image Upload & Handwritten Question Recognition
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsAnalyzingImage(true);
+    setImageOcrStatus(`Reading handwritten notes from "${file.name}"...`);
+
+    try {
+      const extracted = await recognizeImageQuestion(file);
+
+      const promptText = extracted && extracted.length > 5
+        ? `[Uploaded handwritten question from notebook - Photo: ${file.name}]
+Handwritten Question Extracted:
+"${extracted}"
+
+Please interpret and solve this handwritten question step-by-step with detailed explanation.`
+        : `[Uploaded study image/diagram: ${file.name}]
+I have uploaded an image of my handwritten notes/problem. Could you explain the key concepts and solve this problem?`;
+
+      // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = "";
+
+      // Automatically send as query
+      handleSendMessage(promptText);
+    } catch (err) {
+      console.warn("Handwriting image analysis failed:", err);
+      handleSendMessage(`[Uploaded image: ${file.name}]
+Could you help me understand this problem?`);
+    } finally {
+      setIsAnalyzingImage(false);
+      setImageOcrStatus("");
+    }
+  };
 
   const handleSendMessage = async (textToSend = null) => {
     const text = (textToSend || inputMessage).trim();
@@ -344,12 +384,49 @@ ${contextText ? `\n\nStudy Material Context:\n${contextText.slice(0, 4500)}` : "
             ))}
           </div>
 
+          {/* Status banner when analyzing handwritten image */}
+          {isAnalyzingImage && (
+            <div
+              style={{
+                background: "#ede9fe",
+                color: "#6d28d9",
+                padding: "8px 16px",
+                fontSize: "12px",
+                fontWeight: "700",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                borderTop: "1px solid #ddd6fe",
+              }}
+            >
+              <span className="spinner-text">🔍</span>
+              <span>{imageOcrStatus || "Analyzing pen handwriting in image..."}</span>
+            </div>
+          )}
+
           {/* INPUT BAR */}
           <div className="ai-chat-input-bar">
+            {/* Upload Handwritten Question Button */}
+            <label
+              className={`chat-upload-btn ${isAnalyzingImage || isLoading ? "disabled" : ""}`}
+              title="Upload photo of handwritten notes or question written by pen"
+            >
+              <span>📷</span>
+              <span className="hide-on-mobile">{isAnalyzingImage ? "Analyzing..." : "Upload Photo / Handwritten"}</span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                disabled={isAnalyzingImage || isLoading}
+                style={{ display: "none" }}
+              />
+            </label>
+
             <textarea
               ref={textareaRef}
               className="chat-textarea"
-              placeholder={`Ask your AI Tutor anything in ${language}... (Press Enter to send, Shift + Enter for new line)`}
+              placeholder={`Ask your AI Tutor anything in ${language} or upload handwritten image... (Enter to send)`}
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={handleKeyDown}

@@ -93,7 +93,7 @@ const getAssignedStudents = async (req, res, next) => {
   try {
     const studentIds = await getAssignedStudentIds(req.user._id);
 
-    const students = await User.find({ _id: { $in: studentIds } })
+    const students = await User.find({ _id: { $in: studentIds }, isRemoved: { $ne: true } })
       .select("name email createdAt isVerified")
       .lean();
 
@@ -361,7 +361,53 @@ const getAllAssignedQuizResults = async (req, res, next) => {
   }
 };
 
+
+/**
+ * Permanently remove student from class (cannot log in again)
+ */
+const removeStudentFromClass = async (req, res, next) => {
+  try {
+    const { studentId } = req.params;
+    const teacherUserId = req.user._id;
+
+    const student = await User.findById(studentId);
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found.",
+      });
+    }
+
+    // Mark as permanently removed
+    student.isRemoved = true;
+    await student.save();
+
+    // Remove from teacher roster
+    const teacherProfile = await TeacherProfile.findOne({ userId: teacherUserId });
+    if (teacherProfile) {
+      teacherProfile.students = teacherProfile.students.filter(
+        (id) => id.toString() !== studentId.toString()
+      );
+      await teacherProfile.save();
+    }
+
+    // Clear teacher assignment from student profile
+    await StudentProfile.findOneAndUpdate(
+      { userId: studentId },
+      { $set: { teacherId: null } }
+    );
+
+    res.json({
+      success: true,
+      message: `Student ${student.name} (${student.email}) has been permanently removed and cannot log in again.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
+  removeStudentFromClass,
   getTeacherDashboard,
   getAssignedStudents,
   getStudentDetails,
