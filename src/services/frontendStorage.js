@@ -111,17 +111,8 @@ export const getTeacherClassCode = (teacherId = "default_teacher") => {
   return code;
 };
 
-// Default Enrolled Class Students
-export const DEFAULT_STUDENTS_LIST = [
-  { id: "default_student", name: "Alex Smith", email: "alexsmith@lerniq.edu", studentId: "std_101" },
-  { id: "std_102", name: "Marcus Chen", email: "marcus.chen@lerniq.edu", studentId: "std_102" },
-  { id: "std_103", name: "Elena Rostova", email: "elena.r@lerniq.edu", studentId: "std_103" },
-  { id: "std_104", name: "Devin Taylor", email: "devin.t@lerniq.edu", studentId: "std_104" },
-  { id: "std_105", name: "Priya Sharma", email: "priya.s@lerniq.edu", studentId: "std_105" },
-  { id: "std_106", name: "Lucas Vance", email: "lucas.v@lerniq.edu", studentId: "std_106" },
-  { id: "std_107", name: "Sophia Miller", email: "sophia.m@lerniq.edu", studentId: "std_107" },
-  { id: "std_108", name: "Hassan Ali", email: "hassan.a@lerniq.edu", studentId: "std_108" },
-];
+// Default Enrolled Class Students (Removed mock examples - only real registered students are shown)
+export const DEFAULT_STUDENTS_LIST = [];
 
 // ==========================================
 // REMOVED / BLOCKED STUDENTS
@@ -272,59 +263,27 @@ export const deleteTeacherBroadcast = (id) => {
 // ==========================================
 // DIRECT 1-ON-1 MESSAGES (PARTICULAR STUDENT ONLY)
 // ==========================================
-const DEFAULT_DIRECT_MESSAGES = [
-  {
-    id: "dm-1",
-    studentId: "default_student",
-    studentName: "Alex Smith",
-    senderRole: "teacher",
-    senderName: "Prof. Sarah Jenkins",
-    text: "Welcome to class, Alex! Feel free to ask any questions here regarding your assignments or quizzes.",
-    timestamp: "Oct 27, 2026 • 11:00 AM",
-  },
-  {
-    id: "dm-2",
-    studentId: "default_student",
-    studentName: "Alex Smith",
-    senderRole: "student",
-    senderName: "Alex Smith",
-    text: "Thank you Professor! I had a quick question regarding question 4 in the search algorithms quiz.",
-    timestamp: "Oct 27, 2026 • 11:15 AM",
-  },
-  {
-    id: "dm-3",
-    studentId: "default_student",
-    studentName: "Alex Smith",
-    senderRole: "teacher",
-    senderName: "Prof. Sarah Jenkins",
-    text: "Check slide 14 on A* consistency proof. Remember that consistency implies admissibility!",
-    timestamp: "Oct 27, 2026 • 11:22 AM",
-  },
-];
+const DEFAULT_DIRECT_MESSAGES = [];
 
-export const getDirectMessages = (studentKey = "default_student") => {
+export const getDirectMessages = (studentKey = "") => {
+  if (!studentKey) return [];
   try {
-    const cleanKey = String(studentKey || "default_student").toLowerCase();
+    const cleanKey = String(studentKey).toLowerCase();
     const data = localStorage.getItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${cleanKey}`);
-    if (!data) {
-      if (cleanKey === "default_student" || cleanKey.includes("alexsmith")) {
-        localStorage.setItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${cleanKey}`, JSON.stringify(DEFAULT_DIRECT_MESSAGES));
-        return DEFAULT_DIRECT_MESSAGES;
-      }
-      return [];
-    }
-    return JSON.parse(data);
+    return data ? JSON.parse(data) : [];
   } catch {
     return [];
   }
 };
 
-export const sendDirectMessage = (studentKey = "default_student", { senderRole, senderName, text, studentName = "Student", type = "chat" }) => {
-  const cleanKey = String(studentKey || "default_student").toLowerCase();
+export const sendDirectMessage = (studentKey = "", { senderRole, senderName, text, studentName = "Student", type = "chat", studentEmail = "" }) => {
+  if (!studentKey) return [];
+  const cleanKey = String(studentKey).toLowerCase();
   const current = getDirectMessages(cleanKey);
   const newMsg = {
     id: `dm-${Date.now()}`,
     studentId: cleanKey,
+    studentEmail: studentEmail ? String(studentEmail).toLowerCase() : "",
     studentName,
     senderRole, // "student" or "teacher"
     senderName,
@@ -340,11 +299,17 @@ export const sendDirectMessage = (studentKey = "default_student", { senderRole, 
   const updated = [...current, newMsg];
   localStorage.setItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${cleanKey}`, JSON.stringify(updated));
 
-  // If teacher sent it to student, create a popup notification for that specific student!
+  // Also cache under email if available so lookup by either ID or email succeeds
+  if (studentEmail && String(studentEmail).toLowerCase() !== cleanKey) {
+    localStorage.setItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${String(studentEmail).toLowerCase()}`, JSON.stringify(updated));
+  }
+
+  // If teacher sent it to student, create a popup notification strictly for that specific student!
   if (senderRole === "teacher") {
     addStudentPopup({
       id: `dm-pop-${Date.now()}`,
       targetStudentKey: cleanKey,
+      targetStudentEmail: studentEmail ? String(studentEmail).toLowerCase() : null,
       type: type === "quiz_reminder" ? "reminder" : "message",
       title: type === "quiz_reminder" ? `⏰ Quiz Reminder from ${senderName}` : `💬 Message from ${senderName}`,
       message: text,
@@ -355,7 +320,7 @@ export const sendDirectMessage = (studentKey = "default_student", { senderRole, 
     });
   }
 
-  notifyLerniqSync("DIRECT_MESSAGE", { studentKey: cleanKey, message: newMsg });
+  notifyLerniqSync("DIRECT_MESSAGE", { studentKey: cleanKey, studentEmail, message: newMsg });
   return updated;
 };
 
@@ -613,16 +578,7 @@ const DEFAULT_QUIZZES = [
         explanation: "Alpha-beta pruning yields the exact same decision as standard Minimax while skipping irrelevant subtrees.",
       },
     ],
-    studentRoster: [
-      { studentId: "std_101", name: "Alex Smith", email: "alexsmith@lerniq.edu", attempted: true, score: 4, totalQuestions: 4, percentage: 100, completedAt: "Oct 26, 2026, 04:15 PM" },
-      { studentId: "std_102", name: "Marcus Chen", email: "marcus.chen@lerniq.edu", attempted: true, score: 3, totalQuestions: 4, percentage: 75, completedAt: "Oct 26, 2026, 05:40 PM" },
-      { studentId: "std_103", name: "Elena Rostova", email: "elena.r@lerniq.edu", attempted: true, score: 4, totalQuestions: 4, percentage: 100, completedAt: "Oct 27, 2026, 10:12 AM" },
-      { studentId: "std_104", name: "Devin Taylor", email: "devin.t@lerniq.edu", attempted: false, score: 0, totalQuestions: 4, percentage: 0, completedAt: null },
-      { studentId: "std_105", name: "Priya Sharma", email: "priya.s@lerniq.edu", attempted: true, score: 3, totalQuestions: 4, percentage: 75, completedAt: "Oct 27, 2026, 03:20 PM" },
-      { studentId: "std_106", name: "Lucas Vance", email: "lucas.v@lerniq.edu", attempted: false, score: 0, totalQuestions: 4, percentage: 0, completedAt: null },
-      { studentId: "std_107", name: "Sophia Miller", email: "sophia.m@lerniq.edu", attempted: true, score: 3, totalQuestions: 4, percentage: 75, completedAt: "Oct 28, 2026, 01:10 PM" },
-      { studentId: "std_108", name: "Hassan Ali", email: "hassan.a@lerniq.edu", attempted: false, score: 0, totalQuestions: 4, percentage: 0, completedAt: null },
-    ],
+    studentRoster: [],
   },
   {
     id: "quiz-102",
@@ -653,11 +609,7 @@ const DEFAULT_QUIZZES = [
         explanation: "ReLU outputs x if positive, else zero, mitigating the vanishing gradient problem.",
       },
     ],
-    studentRoster: [
-      { studentId: "std_101", name: "Alex Smith", email: "alexsmith@lerniq.edu", attempted: true, score: 2, totalQuestions: 3, percentage: 67, completedAt: "Oct 28, 2026, 09:30 AM" },
-      { studentId: "std_102", name: "Marcus Chen", email: "marcus.chen@lerniq.edu", attempted: true, score: 3, totalQuestions: 3, percentage: 100, completedAt: "Oct 28, 2026, 11:45 AM" },
-      { studentId: "std_104", name: "Devin Taylor", email: "devin.t@lerniq.edu", attempted: false, score: 0, totalQuestions: 3, percentage: 0, completedAt: null },
-    ],
+    studentRoster: [],
   },
 ];
 
@@ -668,7 +620,24 @@ export const getTeacherQuizzes = () => {
       localStorage.setItem(STORAGE_KEYS.QUIZZES, JSON.stringify(DEFAULT_QUIZZES));
       return DEFAULT_QUIZZES;
     }
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    const mockIds = new Set(["std_101", "std_102", "std_103", "std_104", "std_105", "std_106", "std_107", "std_108"]);
+    const cleaned = parsed.map((q) => ({
+      ...q,
+      studentRoster: (q.studentRoster || []).filter(
+        (s) =>
+          !mockIds.has(s.studentId) &&
+          s.name !== "Alex Smith" &&
+          s.name !== "Marcus Chen" &&
+          s.name !== "Elena Rostova" &&
+          s.name !== "Devin Taylor" &&
+          s.name !== "Priya Sharma" &&
+          s.name !== "Lucas Vance" &&
+          s.name !== "Sophia Miller" &&
+          s.name !== "Hassan Ali"
+      ),
+    }));
+    return cleaned;
   } catch {
     return DEFAULT_QUIZZES;
   }
@@ -703,16 +672,7 @@ export const uploadQuiz = ({
     difficulty,
     date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
     questions: actualQuestions,
-    studentRoster: DEFAULT_STUDENTS_LIST.map((s) => ({
-      studentId: s.studentId || s.id,
-      name: s.name,
-      email: s.email,
-      attempted: false,
-      score: 0,
-      totalQuestions: actualQuestions.length,
-      percentage: 0,
-      completedAt: null,
-    })),
+    studentRoster: [],
   };
 
   const updated = [newQuiz, ...current];
@@ -914,7 +874,7 @@ export const addStudentPopup = (popupData) => {
   }
 };
 
-export const getStudentPopups = (studentKey = null) => {
+export const getStudentPopups = (studentKey = null, studentEmail = null) => {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.STUDENT_POPUPS);
     if (!data) return [];
@@ -923,10 +883,19 @@ export const getStudentPopups = (studentKey = null) => {
 
     return list.filter((p) => {
       if (dismissed.includes(p.id)) return false;
-      if (p.targetStudentKey && studentKey) {
-        const cleanT = String(p.targetStudentKey).toLowerCase();
-        const cleanS = String(studentKey).toLowerCase();
-        return cleanT === cleanS || cleanT === "default_student";
+      if (p.targetStudentKey || p.targetStudentEmail) {
+        const cleanT = p.targetStudentKey ? String(p.targetStudentKey).toLowerCase() : "";
+        const cleanE = p.targetStudentEmail ? String(p.targetStudentEmail).toLowerCase() : "";
+        const cleanS = studentKey ? String(studentKey).toLowerCase() : "";
+        const cleanUserEmail = studentEmail ? String(studentEmail).toLowerCase() : "";
+
+        const matchId = cleanT && cleanS && cleanT === cleanS;
+        const matchEmail = cleanE && cleanUserEmail && cleanE === cleanUserEmail;
+        const matchCross =
+          (cleanT && cleanUserEmail && cleanT === cleanUserEmail) ||
+          (cleanE && cleanS && cleanE === cleanS);
+
+        return matchId || matchEmail || matchCross;
       }
       return true; // broadcast popups
     });

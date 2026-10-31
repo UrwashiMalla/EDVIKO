@@ -5,6 +5,8 @@ const Document = require("../models/Document");
 const AIResult = require("../models/AIResult");
 const Quiz = require("../models/Quiz");
 const QuizAttempt = require("../models/QuizAttempt");
+const Message = require("../models/Message");
+const Notification = require("../models/Notification");
 
 /**
  * Helper to fetch assigned student IDs for this teacher
@@ -12,11 +14,27 @@ const QuizAttempt = require("../models/QuizAttempt");
 const getAssignedStudentIds = async (teacherUserId) => {
   const teacherProfile = await TeacherProfile.findOne({ userId: teacherUserId });
   const profiles = await StudentProfile.find({ teacherId: teacherUserId });
-  const idsFromProfiles = profiles.map((p) => p.userId);
-  const idsFromTeacher = teacherProfile ? teacherProfile.students : [];
+  const idsFromProfiles = profiles.filter((p) => p.userId).map((p) => p.userId);
+  const idsFromTeacher = teacherProfile && teacherProfile.students ? teacherProfile.students : [];
+
+  // Also include any registered students belonging to this teacher or unassigned students
+  const otherTeacherProfiles = await TeacherProfile.find({ userId: { $ne: teacherUserId } });
+  const otherTeacherUserIds = otherTeacherProfiles.map((tp) => tp.userId);
+  const otherStudentProfiles = await StudentProfile.find({ teacherId: { $in: otherTeacherUserIds } });
+  const otherStudentUserIds = new Set(otherStudentProfiles.map((sp) => String(sp.userId)));
+
+  const unassignedStudents = await User.find({
+    role: "student",
+    isRemoved: { $ne: true },
+    _id: { $nin: Array.from(otherStudentUserIds) },
+  }).select("_id");
 
   const combined = Array.from(
-    new Set([...idsFromProfiles.map(String), ...idsFromTeacher.map(String)])
+    new Set([
+      ...idsFromProfiles.map(String),
+      ...idsFromTeacher.map(String),
+      ...unassignedStudents.map((s) => String(s._id)),
+    ])
   );
   return combined;
 };
@@ -39,6 +57,7 @@ const getTeacherDashboard = async (req, res, next) => {
     })
       .populate("studentId", "name email")
       .populate("documentId", "title")
+      .populate("quizId", "title")
       .sort({ completedAt: -1 })
       .lean();
 
@@ -58,7 +77,7 @@ const getTeacherDashboard = async (req, res, next) => {
       type: "quiz_attempt",
       studentName: a.studentId?.name || "Student",
       studentEmail: a.studentId?.email,
-      documentTitle: a.documentId?.title || "Study Material",
+      documentTitle: a.quizId?.title || a.documentId?.title || "Study Material",
       score: a.score,
       totalQuestions: a.totalQuestions,
       percentage: a.percentage,
@@ -174,6 +193,7 @@ const getStudentDetails = async (req, res, next) => {
     const documents = await Document.find({ studentId }).sort({ createdAt: -1 }).lean();
     const attempts = await QuizAttempt.find({ studentId })
       .populate("documentId", "title")
+      .populate("quizId", "title")
       .sort({ completedAt: -1 })
       .lean();
 
@@ -218,7 +238,7 @@ const getStudentDetails = async (req, res, next) => {
       documents: enrichedDocs,
       quizResults: attempts.map((a) => ({
         id: a._id,
-        documentTitle: a.documentId?.title || "Study Material",
+        documentTitle: a.quizId?.title || a.documentId?.title || "Class Quiz",
         score: a.score,
         totalQuestions: a.totalQuestions,
         percentage: a.percentage,
@@ -333,6 +353,7 @@ const getAllAssignedQuizResults = async (req, res, next) => {
     const attempts = await QuizAttempt.find({ studentId: { $in: studentIds } })
       .populate("studentId", "name email")
       .populate("documentId", "title")
+      .populate("quizId", "title")
       .sort({ completedAt: -1 })
       .lean();
 
@@ -343,12 +364,17 @@ const getAllAssignedQuizResults = async (req, res, next) => {
         name: a.studentId?.name || "Student",
         email: a.studentId?.email || "",
       },
-      documentTitle: a.documentId?.title || "Study Material",
+      documentTitle: a.quizId?.title || a.documentId?.title || "Class Quiz",
       documentId: a.documentId?._id || a.documentId,
       score: a.score,
       totalQuestions: a.totalQuestions,
+      correctCount: a.correctCount,
+      wrongCount: a.wrongCount,
+      unattemptedCount: a.unattemptedCount,
       percentage: a.percentage,
+      passed: a.passed,
       completedAt: a.completedAt,
+      answers: a.answers,
     }));
 
     res.json({
@@ -406,6 +432,183 @@ const removeStudentFromClass = async (req, res, next) => {
   }
 };
 
+/**
+ * Teacher sends broadcast announcement to all students in classroom
+ */
+const sendBroadcast = async (req, res, next) => {
+  try {
+    const { title, content, priority = "Normal", tag = "Announcement" } = req.body;
+
+    if (!title || !title.trim() || !content || !content.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Announcement title and content are required.",
+      });
+    }
+
+    const teacherProfile = await TeacherProfile.findOne({ userId: req.user._id });
+    const classroomCode = teacherProfile?.teacherCode || "CLASS-101";
+
+    const broadcast = await Message.create({
+      senderId: req.user._id,
+      senderName: req.user.name || "Prof. Sarah Jenkins",
+      senderRole: "teacher",
+      recipientId: null,
+      recipientName: "All Students",
+      classroomCode,
+      isBroadcast: true,
+      title: title.trim(),
+      text: content.trim(),
+      priority,
+      tag,
+    });
+
+    // Notify all assigned students in this teacher's classroom
+    try {
+      const studentIds = await getAssignedStudentIds(req.user._id);
+      if (studentIds.length > 0) {
+        const notifs = studentIds.map((sId) => ({
+          recipientId: sId,
+          senderId: req.user._id,
+          senderName: req.user.name || "Prof. Sarah Jenkins",
+          classroomCode,
+          type: "announcement",
+          title: `📢 New Class Announcement: ${title.trim()}`,
+          message: content.trim(),
+          link: "/student/dashboard",
+          isRead: false,
+        }));
+        await Notification.insertMany(notifs);
+      }
+    } catch (notifErr) {
+      console.warn("Broadcast notification warning:", notifErr.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Announcement broadcast successfully to all students!",
+      broadcast,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Teacher gets all broadcasts sent
+ */
+const getBroadcasts = async (req, res, next) => {
+  try {
+    const broadcasts = await Message.find({
+      senderId: req.user._id,
+      isBroadcast: true,
+    }).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      broadcasts,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Teacher sends direct message to a particular student
+ */
+const sendDirectMessage = async (req, res, next) => {
+  try {
+    const studentId = req.params.studentId || req.body.studentId;
+    const text = req.body.text || req.body.message;
+
+    if (!studentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Target student ID is required.",
+      });
+    }
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Message text cannot be empty.",
+      });
+    }
+
+    // Verify student exists
+    const student = await User.findById(studentId);
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student account not found.",
+      });
+    }
+
+    const teacherProfile = await TeacherProfile.findOne({ userId: req.user._id });
+    const classroomCode = teacherProfile?.teacherCode || "";
+
+    const msg = await Message.create({
+      senderId: req.user._id,
+      senderName: req.user.name || "Prof. Sarah Jenkins",
+      senderRole: "teacher",
+      recipientId: student._id,
+      recipientName: student.name || "Student",
+      classroomCode,
+      isBroadcast: false,
+      text: text.trim(),
+    });
+
+    // Notify the selected student in MongoDB
+    try {
+      await Notification.create({
+        recipientId: student._id,
+        senderId: req.user._id,
+        senderName: req.user.name || "Prof. Sarah Jenkins",
+        classroomCode,
+        type: "message",
+        title: `💬 New Message from ${req.user.name || "Professor"}`,
+        message: text.trim(),
+        link: "/student/dashboard",
+        isRead: false,
+      });
+    } catch (notifErr) {
+      console.warn("DM notification warning:", notifErr.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Direct message delivered to ${student.name}!`,
+      directMessage: msg,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Teacher gets conversation history with a particular student
+ */
+const getStudentDirectMessages = async (req, res, next) => {
+  try {
+    const { studentId } = req.params;
+
+    const messages = await Message.find({
+      isBroadcast: false,
+      $or: [
+        { senderId: req.user._id, recipientId: studentId },
+        { senderId: studentId, recipientId: req.user._id },
+      ],
+    }).sort({ createdAt: 1 });
+
+    res.json({
+      success: true,
+      messages,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   removeStudentFromClass,
   getTeacherDashboard,
@@ -414,4 +617,8 @@ module.exports = {
   getStudentQuizResults,
   getAllAssignedDocuments,
   getAllAssignedQuizResults,
+  sendBroadcast,
+  getBroadcasts,
+  sendDirectMessage,
+  getStudentDirectMessages,
 };

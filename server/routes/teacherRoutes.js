@@ -8,6 +8,10 @@ const {
   getAllAssignedDocuments,
   getAllAssignedQuizResults,
   removeStudentFromClass,
+  sendBroadcast,
+  getBroadcasts,
+  sendDirectMessage,
+  getStudentDirectMessages,
 } = require("../controllers/teacherController");
 const { authenticate, requireRole } = require("../middleware/authMiddleware");
 
@@ -22,5 +26,12 @@ router.get("/documents", getAllAssignedDocuments);
 router.get("/quiz-results", getAllAssignedQuizResults);
 router.delete("/students/:studentId", removeStudentFromClass);
 router.post("/students/:studentId/remove", removeStudentFromClass);
+
+// Messaging: Group Broadcast & Direct 1-on-1 Message to particular student
+router.post("/broadcast", sendBroadcast);
+router.get("/broadcasts", getBroadcasts);
+router.post("/students/:studentId/message", sendDirectMessage);
+router.post("/message", sendDirectMessage);
+router.get("/students/:studentId/messages", getStudentDirectMessages);
 
 module.exports = router;

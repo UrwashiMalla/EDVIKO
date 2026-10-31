@@ -44,34 +44,10 @@ function TeacherStudents() {
       try {
         const res = await teacherApi.getStudents();
         const apiStudents = res.students || [];
-        if (apiStudents.length > 0) {
-          setStudents(apiStudents);
-        } else {
-          setStudents(
-            DEFAULT_STUDENTS_LIST.map((s) => ({
-              id: s.id,
-              name: s.name,
-              email: s.email,
-              totalDocuments: 3,
-              totalQuizAttempts: 2,
-              averageScore: 84,
-              lastActivity: new Date().toISOString(),
-            }))
-          );
-        }
+        setStudents(apiStudents);
       } catch (err) {
         setError(err.message || "Failed to load students.");
-        setStudents(
-          DEFAULT_STUDENTS_LIST.map((s) => ({
-            id: s.id,
-            name: s.name,
-            email: s.email,
-            totalDocuments: 3,
-            totalQuizAttempts: 2,
-            averageScore: 84,
-            lastActivity: new Date().toISOString(),
-          }))
-        );
+        setStudents([]);
       } finally {
         setLoading(false);
       }
@@ -124,20 +100,55 @@ function TeacherStudents() {
   };
 
   // Direct message handlers
-  const handleOpenDM = (student) => {
+  const handleOpenDM = async (student) => {
     setDmStudent(student);
     setDmMessages(getDirectMessages(student.id));
+
+    // Fetch conversation from backend API
+    try {
+      const res = await teacherApi.getDirectMessages(student.id);
+      if (res && res.messages && res.messages.length > 0) {
+        const formatted = res.messages.map((m) => ({
+          id: m._id,
+          studentId: student.id,
+          studentName: student.name,
+          senderRole: m.senderRole,
+          senderName: m.senderName,
+          text: m.text,
+          timestamp: new Date(m.createdAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        }));
+        setDmMessages(formatted);
+      }
+    } catch (err) {
+      console.warn("Could not load backend messages:", err.message);
+    }
   };
 
-  const handleSendDM = (e) => {
+  const handleSendDM = async (e) => {
     e.preventDefault();
     if (!dmInput.trim() || !dmStudent) return;
 
+    const text = dmInput.trim();
+
+    // 1. Send via backend API to store in MongoDB and create student Notification
+    try {
+      await teacherApi.sendDirectMessage(dmStudent.id, { text });
+    } catch (err) {
+      console.warn("Backend DM save error:", err.message);
+    }
+
+    // 2. Also save to frontend storage and sync bus
     const updated = sendDirectMessage(dmStudent.id, {
       senderRole: "teacher",
       senderName: user?.name || "Prof. Sarah Jenkins",
-      text: dmInput.trim(),
+      text,
       studentName: dmStudent.name,
+      studentEmail: dmStudent.email,
     });
 
     setDmMessages(updated);
@@ -145,23 +156,10 @@ function TeacherStudents() {
     showToast(`Personal message delivered to ${dmStudent.name}!`);
   };
 
-  // All known students map for recovery
+  // Real students map for recovery
   const allKnownStudents = (() => {
     const map = new Map();
     students.forEach((s) => map.set(String(s.id), s));
-    DEFAULT_STUDENTS_LIST.forEach((s) => {
-      if (!map.has(String(s.id))) {
-        map.set(String(s.id), {
-          id: s.id,
-          name: s.name,
-          email: s.email,
-          totalDocuments: 3,
-          totalQuizAttempts: 2,
-          averageScore: 84,
-          lastActivity: new Date().toISOString(),
-        });
-      }
-    });
     return Array.from(map.values());
   })();
 

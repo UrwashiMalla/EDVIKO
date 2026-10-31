@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
+import { notificationApi } from "../services/api";
 import {
   getInstitutionName,
   setInstitutionName,
@@ -41,6 +42,104 @@ function Navbar({ activeTab = "dashboard" }) {
   const [entryToast, setEntryToast] = useState(null);
 
   const unreadCount = classroomEntries.filter((e) => !e.read).length;
+
+  // Student Quiz & Course Notifications State (MongoDB backed + offline preservation)
+  const [studentNotifications, setStudentNotifications] = useState([]);
+  const [showStudentNotificationPopup, setShowStudentNotificationPopup] = useState(false);
+  const [quizPopup, setQuizPopup] = useState(null);
+
+  const studentUnreadCount = studentNotifications.filter((n) => !n.isRead).length;
+
+  const fetchStudentNotifications = async (showPopupOnLogin = false) => {
+    if (isTeacher || !user) return;
+    try {
+      const res = await notificationApi.getMyNotifications();
+      const list = res.notifications || [];
+      setStudentNotifications(list);
+
+      // Requirement E: Show popup notification when student logs in / visits if there are unread quiz alerts
+      if (showPopupOnLogin) {
+        const unread = list.filter((n) => !n.isRead);
+        if (unread.length > 0) {
+          const latest = unread[0];
+          setQuizPopup({
+            id: latest._id,
+            title: latest.title,
+            message: latest.message,
+            quizId: latest.quizId,
+            link: latest.link || "/student/quizzes",
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Could not load student notifications:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (isTeacher || !user) return;
+    fetchStudentNotifications(true);
+
+    const unsubscribe = onLerniqSync((detail) => {
+      if (
+        detail.type === "QUIZ_UPLOADED" ||
+        detail.type === "QUIZ_PUBLISHED" ||
+        detail.type === "QUIZ_NOTIFICATION" ||
+        detail.type === "NEW_STUDENT_POPUP" ||
+        detail.type === "BROADCAST_CREATED" ||
+        detail.type === "DIRECT_MESSAGE"
+      ) {
+        fetchStudentNotifications(false);
+        const p = detail.payload || {};
+
+        if (detail.type === "DIRECT_MESSAGE") {
+          const myId = String(user?.id || user?._id || "").toLowerCase();
+          const myEmail = String(user?.email || "").toLowerCase();
+          const targetKey = String(p.studentKey || "").toLowerCase();
+          const targetEmail = String(p.studentEmail || "").toLowerCase();
+
+          if (myId === targetKey || myEmail === targetKey || (targetEmail && myEmail === targetEmail)) {
+            setQuizPopup({
+              id: `dm-pop-${Date.now()}`,
+              title: `💬 New Message from ${p.message?.senderName || "Professor"}`,
+              message: p.message?.text || "You received a new direct message.",
+              link: "/student/dashboard",
+            });
+          }
+        } else if (detail.type === "BROADCAST_CREATED") {
+          setQuizPopup({
+            id: p._id || p.id || `ann-pop-${Date.now()}`,
+            title: `📢 Announcement: ${p.title || "Class Notice"}`,
+            message: p.content || p.message || "A new class announcement has been posted.",
+            link: "/student/dashboard",
+          });
+        } else if (p.title) {
+          setQuizPopup({
+            id: p._id || p.id || `quiz-pop-${Date.now()}`,
+            title: p.title.startsWith("New Quiz") ? p.title : `New Quiz: ${p.title}`,
+            message: p.message || `A new quiz "${p.title}" was published to your classroom. Test your knowledge now!`,
+            quizId: p._id || p.id,
+            link: "/student/quizzes",
+          });
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, [user, isTeacher]);
+
+  const handleToggleStudentNotifications = async () => {
+    const nextState = !showStudentNotificationPopup;
+    setShowStudentNotificationPopup(nextState);
+    if (nextState && studentUnreadCount > 0) {
+      try {
+        await notificationApi.markAllRead();
+        setStudentNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      } catch (err) {
+        console.warn("Error marking notifications read:", err);
+      }
+    }
+  };
 
   useEffect(() => {
     if (user?.name) setTeacherName(user.name);
@@ -145,6 +244,79 @@ function Navbar({ activeTab = "dashboard" }) {
           >
             ✕
           </button>
+        </motion.div>
+      )}
+
+      {/* Real-time Quiz Notification Toast / Popup for Students */}
+      {quizPopup && !isTeacher && (
+        <motion.div
+          initial={{ opacity: 0, y: -20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -20 }}
+          style={{
+            position: "fixed",
+            top: "76px",
+            right: "24px",
+            zIndex: 99999,
+            background: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
+            color: "#ffffff",
+            padding: "16px 20px",
+            borderRadius: "16px",
+            boxShadow: "0 14px 35px rgba(124, 58, 237, 0.4)",
+            display: "flex",
+            alignItems: "center",
+            gap: "14px",
+            maxWidth: "420px",
+            border: "1px solid rgba(255, 255, 255, 0.25)",
+          }}
+        >
+          <span style={{ fontSize: "28px" }}>🎯</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.5px", color: "#c4b5fd" }}>
+              Classroom Quiz Alert
+            </div>
+            <div style={{ fontSize: "14px", fontWeight: "700", color: "#ffffff", margin: "2px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {quizPopup.title}
+            </div>
+            <div style={{ fontSize: "12px", opacity: 0.9, lineHeight: "1.3" }}>
+              {quizPopup.message}
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <button
+              onClick={() => {
+                setQuizPopup(null);
+                navigate(quizPopup.link || "/student/quizzes");
+              }}
+              style={{
+                background: "#ffffff",
+                color: "#6d28d9",
+                border: "none",
+                borderRadius: "8px",
+                padding: "7px 12px",
+                fontSize: "12px",
+                fontWeight: "800",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              }}
+            >
+              Open Quiz →
+            </button>
+            <button
+              onClick={() => setQuizPopup(null)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "rgba(255, 255, 255, 0.8)",
+                fontSize: "11px",
+                cursor: "pointer",
+                textAlign: "center",
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
         </motion.div>
       )}
 
@@ -393,6 +565,177 @@ function Navbar({ activeTab = "dashboard" }) {
                             <div style={{ fontSize: "10px", color: "#8b5cf6", marginTop: "3px", fontWeight: "600" }}>
                               Entered Classroom • {entry.timestamp} ({entry.date})
                             </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STUDENT NOTIFICATION BELL & POPUP DROPDOWN (Requirement E) */}
+          {!isTeacher && (
+            <div style={{ position: "relative", marginRight: "14px" }}>
+              <button
+                type="button"
+                className="icon-button notification-button"
+                onClick={handleToggleStudentNotifications}
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "50%",
+                  border: studentUnreadCount > 0 ? "1.5px solid #a78bfa" : "1px solid #e2e8f0",
+                  background: studentUnreadCount > 0 ? "#ede9fe" : "#ffffff",
+                  color: studentUnreadCount > 0 ? "#6d28d9" : "#64748b",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  position: "relative",
+                  boxShadow: studentUnreadCount > 0 ? "0 4px 12px rgba(124, 58, 237, 0.2)" : "none",
+                  transition: "all 0.2s ease",
+                }}
+                title="Classroom & Quiz Notifications"
+                aria-label="Student Notifications"
+              >
+                <span style={{ fontSize: "16px" }}>🔔</span>
+                {studentUnreadCount > 0 && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: "-4px",
+                      right: "-4px",
+                      background: "#ef4444",
+                      color: "#ffffff",
+                      borderRadius: "10px",
+                      padding: "1px 5px",
+                      fontSize: "10px",
+                      fontWeight: "800",
+                      minWidth: "16px",
+                      textAlign: "center",
+                      lineHeight: "14px",
+                      border: "2px solid #ffffff",
+                    }}
+                  >
+                    {studentUnreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Student Notification Dropdown */}
+              {showStudentNotificationPopup && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "46px",
+                    right: 0,
+                    width: "340px",
+                    background: "#ffffff",
+                    borderRadius: "16px",
+                    boxShadow: "0 12px 36px rgba(0,0,0,0.18)",
+                    border: "1px solid #ede9fe",
+                    zIndex: 99999,
+                    overflow: "hidden",
+                    animation: "fadeIn 0.2s ease-out",
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "14px 18px",
+                      background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+                      color: "#ffffff",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: "800", fontSize: "14px" }}>
+                        🔔 Quiz Notifications {studentUnreadCount > 0 && `(${studentUnreadCount} new)`}
+                      </div>
+                      <small style={{ opacity: 0.85, fontSize: "11px" }}>
+                        Preserved classroom updates
+                      </small>
+                    </div>
+                    <button
+                      onClick={() => setShowStudentNotificationPopup(false)}
+                      style={{
+                        background: "rgba(255,255,255,0.2)",
+                        border: "none",
+                        color: "#fff",
+                        borderRadius: "50%",
+                        width: "24px",
+                        height: "24px",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div style={{ maxHeight: "320px", overflowY: "auto", padding: "10px" }}>
+                    {studentNotifications.length === 0 ? (
+                      <div style={{ padding: "28px 16px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                        <span style={{ fontSize: "28px", display: "block", marginBottom: "6px" }}>🔕</span>
+                        No notifications yet.
+                        <br />
+                        <small style={{ fontSize: "11px", color: "#cbd5e1" }}>
+                          When your teacher publishes quizzes, you'll see alerts here.
+                        </small>
+                      </div>
+                    ) : (
+                      studentNotifications.map((n) => (
+                        <div
+                          key={n._id || n.id}
+                          style={{
+                            padding: "12px 14px",
+                            borderRadius: "12px",
+                            background: n.isRead ? "#ffffff" : "#f5f3ff",
+                            border: "1px solid",
+                            borderColor: n.isRead ? "#f1f5f9" : "#ddd6fe",
+                            marginBottom: "8px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "6px",
+                            transition: "all 0.15s ease",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <span style={{ fontSize: "12px", fontWeight: "800", color: "#7c3aed" }}>
+                              🎯 {n.title}
+                            </span>
+                            {!n.isRead && (
+                              <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444" }} />
+                            )}
+                          </div>
+                          <p style={{ margin: 0, fontSize: "12px", color: "#475569", lineHeight: "1.4" }}>
+                            {n.message}
+                          </p>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+                            <small style={{ fontSize: "10px", color: "#94a3b8" }}>
+                              {n.createdAt ? new Date(n.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Just now"}
+                            </small>
+                            <button
+                              onClick={() => {
+                                setShowStudentNotificationPopup(false);
+                                navigate(n.link || "/student/quizzes");
+                              }}
+                              style={{
+                                background: "#ede9fe",
+                                color: "#6d28d9",
+                                border: "none",
+                                borderRadius: "6px",
+                                padding: "4px 8px",
+                                fontSize: "11px",
+                                fontWeight: "700",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Open Quiz →
+                            </button>
                           </div>
                         </div>
                       ))
