@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { getTeacherQuizzes, sendQuizReminder, onLerniqSync } from "../services/frontendStorage";
+import { getTeacherQuizzes, sendQuizReminder, notifyLerniqSync, onLerniqSync } from "../services/frontendStorage";
+import { quizApi } from "../services/api";
 import { useAuth } from "../context/useAuth";
 import Navbar from "./Navbar";
 
@@ -9,6 +10,9 @@ function TeacherQuizResults() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [quizzes, setQuizzes] = useState([]);
   const [selectedQuizId, setSelectedQuizId] = useState("");
+  const [backendRoster, setBackendRoster] = useState(null);
+  const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
+  const [reviewModalStudent, setReviewModalStudent] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [attemptFilter, setAttemptFilter] = useState("all"); // "all" | "attempted" | "not_attempted"
   const [toast, setToast] = useState("");
@@ -18,23 +22,100 @@ function TeacherQuizResults() {
     setTimeout(() => setToast(""), 3500);
   };
 
+  const loadSubmissions = async (quizId) => {
+    if (!quizId) return;
+    setIsLoadingSubmissions(true);
+    try {
+      const res = await quizApi.getSubmissions(quizId);
+      if (res && res.studentRoster && res.studentRoster.length > 0) {
+        setBackendRoster(res.studentRoster);
+      } else if (res && res.attempts && res.attempts.length > 0) {
+        const formatted = res.attempts.map((a) => ({
+          studentId: a.student?.id || a.studentId,
+          name: a.student?.name || "Student",
+          email: a.student?.email || "",
+          attempted: true,
+          score: a.percentage,
+          marks: a.score,
+          totalMarks: a.totalQuestions,
+          totalQuestions: a.totalQuestions,
+          correctCount: a.correctCount,
+          wrongCount: a.wrongCount,
+          unattemptedCount: a.unattemptedCount,
+          percentage: a.percentage,
+          passed: a.passed,
+          completedAt: a.completedAt ? new Date(a.completedAt).toLocaleString() : null,
+          attemptId: a.id,
+          answers: a.answers || [],
+        }));
+        setBackendRoster(formatted);
+      } else if (res && res.studentRoster) {
+        setBackendRoster(res.studentRoster);
+      } else {
+        setBackendRoster(null);
+      }
+    } catch (err) {
+      console.warn("Could not load backend submissions, using local roster:", err);
+      setBackendRoster(null);
+    } finally {
+      setIsLoadingSubmissions(false);
+    }
+  };
+
+  const loadQuizzes = async () => {
+    try {
+      const res = await quizApi.list();
+      const apiQuizzes = (res.quizzes || []).map((q) => ({
+        id: q._id || q.id,
+        title: q.title,
+        subject: q.subject,
+        questionCount: q.questions ? q.questions.length : (q.questionCount || 0),
+        passingScore: q.passingScore,
+        timeLimit: q.timeLimit,
+        difficulty: q.difficulty,
+        studentRoster: q.studentRoster || [],
+        questions: q.questions || [],
+      }));
+
+      const localQuizzes = getTeacherQuizzes();
+      const combined = apiQuizzes.length > 0 ? apiQuizzes : localQuizzes;
+      setQuizzes(combined);
+
+      const paramId = searchParams.get("quizId");
+      const targetId = paramId && combined.some((q) => q.id === paramId)
+        ? paramId
+        : (combined.length > 0 ? combined[0].id : "");
+
+      setSelectedQuizId(targetId);
+      if (targetId) {
+        loadSubmissions(targetId);
+      }
+    } catch (err) {
+      console.warn("Falling back to local quizzes:", err);
+      const list = getTeacherQuizzes();
+      setQuizzes(list);
+      if (list.length > 0) {
+        setSelectedQuizId(list[0].id);
+      }
+    }
+  };
+
   useEffect(() => {
-    const list = getTeacherQuizzes();
-    setQuizzes(list);
+    loadQuizzes();
     const unsubscribe = onLerniqSync((detail) => {
-      if (detail.type === "QUIZ_ATTEMPT_SUBMITTED" || detail.type === "QUIZ_UPLOADED" || detail.type === "QUIZ_DELETED") {
-        setQuizzes(getTeacherQuizzes());
+      if (
+        detail.type === "QUIZ_ATTEMPT_SUBMITTED" ||
+        detail.type === "QUIZ_UPLOADED" ||
+        detail.type === "QUIZ_PUBLISHED" ||
+        detail.type === "QUIZ_DELETED"
+      ) {
+        loadQuizzes();
       }
     });
-    const paramId = searchParams.get("quizId");
-    if (paramId && list.some((q) => q.id === paramId)) {
-      setSelectedQuizId(paramId);
-    } else if (list.length > 0) {
-      setSelectedQuizId(list[0].id);
-    }
+    return unsubscribe;
   }, [searchParams]);
 
-    const handleSendReminderToStudent = (std) => {
+  const handleSendReminderToStudent = (std) => {
     if (!selectedQuiz) return;
     sendQuizReminder({
       studentId: std.studentId || std.id,
@@ -43,18 +124,43 @@ function TeacherQuizResults() {
       quizTitle: selectedQuiz.title,
       teacherName: user?.name || "Prof. Sarah Jenkins",
     });
+
+    // Also broadcast on sync bus for real-time notification
+    notifyLerniqSync("QUIZ_NOTIFICATION", {
+      title: `Reminder: ${selectedQuiz.title}`,
+      message: `${user?.name || "Your Teacher"} sent a reminder to complete "${selectedQuiz.title}".`,
+      studentId: std.studentId || std.id,
+      quizId: selectedQuiz.id,
+    });
+
     showToast(`📢 Reminder delivered directly to ${std.name} (${std.email})!`);
   };
 
   const handleSelectQuiz = (id) => {
     setSelectedQuizId(id);
     setSearchParams({ quizId: id });
+    loadSubmissions(id);
   };
 
   const selectedQuiz = quizzes.find((q) => q.id === selectedQuizId) || quizzes[0] || null;
 
-  // Student roster for selected quiz
-  const roster = selectedQuiz?.studentRoster || [];
+  // Student roster for selected quiz (backend roster from MongoDB or local fallback)
+  const baseRoster = (backendRoster && backendRoster.length > 0)
+    ? backendRoster
+    : (selectedQuiz?.studentRoster && selectedQuiz.studentRoster.length > 0 ? selectedQuiz.studentRoster : []);
+
+  // Filter out any mock students just in case (e.g. Alex Smith, Marcus Chen, etc.)
+  const roster = baseRoster.filter(
+    (s) =>
+      s.name !== "Alex Smith" &&
+      s.name !== "Marcus Chen" &&
+      s.name !== "Elena Rostova" &&
+      s.name !== "Devin Taylor" &&
+      s.name !== "Priya Sharma" &&
+      s.name !== "Lucas Vance" &&
+      s.name !== "Sophia Miller" &&
+      s.name !== "Hassan Ali"
+  );
 
   // Filter roster
   const filteredStudents = roster.filter((std) => {
@@ -487,9 +593,18 @@ function TeacherQuizResults() {
 
                       <td style={{ padding: "16px" }}>
                         {std.attempted ? (
-                          <span style={{ fontWeight: "800", color: "#1e293b", fontSize: "15px" }}>
-                            {Math.round((std.score / 100) * std.totalQuestions)} / {std.totalQuestions}
-                          </span>
+                          <div>
+                            <span style={{ fontWeight: "800", color: "#1e293b", fontSize: "15px" }}>
+                              {std.marks !== undefined ? std.marks : Math.round((std.score / 100) * std.totalQuestions)} / {std.totalMarks || std.totalQuestions}
+                            </span>
+                            {std.correctCount !== undefined && (
+                              <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                                <span style={{ color: "#16a34a", fontWeight: "700" }}>✓ {std.correctCount}</span> •{" "}
+                                <span style={{ color: "#dc2626", fontWeight: "700" }}>✗ {std.wrongCount}</span> •{" "}
+                                <span style={{ color: "#64748b" }}>⚪ {std.unattemptedCount}</span>
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <span style={{ color: "#94a3b8", fontSize: "13px" }}>—</span>
                         )}
@@ -497,15 +612,29 @@ function TeacherQuizResults() {
 
                       <td style={{ padding: "16px" }}>
                         {std.attempted ? (
-                          <span
-                            style={{
-                              fontWeight: "700",
-                              fontSize: "13px",
-                              color: std.score >= 70 ? "#059669" : std.score >= 50 ? "#d97706" : "#dc2626",
-                            }}
-                          >
-                            {std.score}%
-                          </span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span
+                              style={{
+                                fontWeight: "700",
+                                fontSize: "13px",
+                                color: std.score >= 70 ? "#059669" : std.score >= 50 ? "#d97706" : "#dc2626",
+                              }}
+                            >
+                              {std.score}%
+                            </span>
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                fontWeight: "800",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                background: std.passed ? "#dcfce7" : "#fee2e2",
+                                color: std.passed ? "#166534" : "#991b1b",
+                              }}
+                            >
+                              {std.passed ? "PASSED" : "FAILED"}
+                            </span>
+                          </div>
                         ) : (
                           <span style={{ color: "#94a3b8", fontSize: "13px" }}>Pending</span>
                         )}
@@ -521,17 +650,40 @@ function TeacherQuizResults() {
 
                       <td style={{ padding: "16px" }}>
                         {std.attempted ? (
-                          <Link
-                            to={`/teacher/students/${std.studentId}`}
-                            style={{
-                              color: "#7c3aed",
-                              fontWeight: "700",
-                              fontSize: "13px",
-                              textDecoration: "none",
-                            }}
-                          >
-                            View Record →
-                          </Link>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                            <button
+                              onClick={() => setReviewModalStudent(std)}
+                              style={{
+                                padding: "6px 12px",
+                                background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
+                                color: "#ffffff",
+                                border: "none",
+                                borderRadius: "8px",
+                                fontSize: "12px",
+                                fontWeight: "700",
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                boxShadow: "0 2px 8px rgba(124, 58, 237, 0.25)",
+                              }}
+                            >
+                              <span>👁️</span>
+                              <span>Review Answers</span>
+                            </button>
+
+                            <Link
+                              to={`/teacher/students/${std.studentId}`}
+                              style={{
+                                color: "#7c3aed",
+                                fontWeight: "700",
+                                fontSize: "12px",
+                                textDecoration: "none",
+                              }}
+                            >
+                              Profile →
+                            </Link>
+                          </div>
                         ) : (
                           <button
                             onClick={() => handleSendReminderToStudent(std)}
@@ -557,6 +709,306 @@ function TeacherQuizResults() {
             </div>
           )}
         </div>
+
+        {/* ================= REVIEW STUDENT SUBMISSION MODAL ================= */}
+        {reviewModalStudent && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(15, 23, 42, 0.75)",
+              backdropFilter: "blur(5px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 99999,
+              padding: "20px",
+            }}
+            onClick={() => setReviewModalStudent(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: "#ffffff",
+                borderRadius: "24px",
+                width: "100%",
+                maxWidth: "880px",
+                maxHeight: "92vh",
+                display: "flex",
+                flexDirection: "column",
+                boxShadow: "0 25px 60px rgba(0,0,0,0.3)",
+                overflow: "hidden",
+              }}
+            >
+              {/* Modal Header */}
+              <div
+                style={{
+                  background: "linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%)",
+                  color: "#ffffff",
+                  padding: "22px 28px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: "700",
+                      textTransform: "uppercase",
+                      letterSpacing: "1px",
+                      background: "rgba(255,255,255,0.2)",
+                      padding: "3px 8px",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    Student Quiz Review
+                  </span>
+                  <h2 style={{ fontSize: "20px", fontWeight: "800", margin: "6px 0 0 0" }}>
+                    {reviewModalStudent.name} ({reviewModalStudent.email})
+                  </h2>
+                  <div style={{ fontSize: "13px", opacity: 0.9, marginTop: "2px" }}>
+                    Assessment: <strong>{selectedQuiz?.title}</strong>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setReviewModalStudent(null)}
+                  style={{
+                    background: "rgba(255,255,255,0.2)",
+                    border: "none",
+                    borderRadius: "50%",
+                    width: "36px",
+                    height: "36px",
+                    color: "#ffffff",
+                    fontSize: "16px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Score Summary Strip */}
+              <div
+                style={{
+                  padding: "16px 28px",
+                  background: "#f8fafc",
+                  borderBottom: "1px solid #e2e8f0",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "24px",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div style={{ display: "flex", gap: "24px", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", fontWeight: "700" }}>Total Marks</div>
+                    <div style={{ fontSize: "22px", fontWeight: "800", color: "#1e293b" }}>
+                      {reviewModalStudent.marks !== undefined ? reviewModalStudent.marks : Math.round((reviewModalStudent.score / 100) * reviewModalStudent.totalQuestions)} / {reviewModalStudent.totalMarks || reviewModalStudent.totalQuestions}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", fontWeight: "700" }}>Percentage</div>
+                    <div
+                      style={{
+                        fontSize: "22px",
+                        fontWeight: "800",
+                        color: reviewModalStudent.score >= 70 ? "#059669" : reviewModalStudent.score >= 50 ? "#d97706" : "#dc2626",
+                      }}
+                    >
+                      {reviewModalStudent.score}%
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", fontWeight: "700" }}>Outcome</div>
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: "800",
+                        padding: "4px 10px",
+                        borderRadius: "6px",
+                        background: reviewModalStudent.passed ? "#dcfce7" : "#fee2e2",
+                        color: reviewModalStudent.passed ? "#166534" : "#991b1b",
+                        display: "inline-block",
+                        marginTop: "4px",
+                      }}
+                    >
+                      {reviewModalStudent.passed ? "PASSED" : "FAILED"}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: "13px", color: "#64748b" }}>
+                  <div>✓ Correct: <strong style={{ color: "#16a34a" }}>{reviewModalStudent.correctCount !== undefined ? reviewModalStudent.correctCount : reviewModalStudent.marks}</strong></div>
+                  <div>✗ Wrong: <strong style={{ color: "#dc2626" }}>{reviewModalStudent.wrongCount !== undefined ? reviewModalStudent.wrongCount : ((reviewModalStudent.totalQuestions || 0) - (reviewModalStudent.marks || 0))}</strong></div>
+                  <div>Submitted: <strong>{reviewModalStudent.completedAt || "Recent"}</strong></div>
+                </div>
+              </div>
+
+              {/* Questions Breakdown List */}
+              <div style={{ padding: "24px 28px", overflowY: "auto", flex: 1 }}>
+                <h3 style={{ fontSize: "16px", fontWeight: "800", color: "#1e293b", marginBottom: "16px" }}>
+                  Detailed Question Breakdown & Student Answer Evaluation
+                </h3>
+
+                {(!reviewModalStudent.answers || reviewModalStudent.answers.length === 0) ? (
+                  <div style={{ padding: "28px", textAlign: "center", color: "#64748b" }}>
+                    Detailed answer breakdown not recorded for this historical attempt.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+                    {reviewModalStudent.answers.map((ans, idx) => {
+                      const isCorrect = ans.isCorrect === true || ans.status === "Correct";
+                      const isNotAttempted = ans.status === "Not Attempted" || ans.selectedAnswer === -1;
+
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            borderRadius: "14px",
+                            border: isCorrect ? "1.5px solid #86efac" : isNotAttempted ? "1.5px solid #cbd5e1" : "1.5px solid #fca5a5",
+                            background: isCorrect ? "#f0fdf4" : isNotAttempted ? "#f8fafc" : "#fef2f2",
+                            padding: "16px 20px",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                            <span style={{ fontSize: "13px", fontWeight: "800", color: "#334155" }}>
+                              Question {idx + 1}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: "800",
+                                padding: "3px 8px",
+                                borderRadius: "6px",
+                                background: isCorrect ? "#dcfce7" : isNotAttempted ? "#e2e8f0" : "#fee2e2",
+                                color: isCorrect ? "#15803d" : isNotAttempted ? "#475569" : "#b91c1c",
+                              }}
+                            >
+                              {isCorrect ? "✓ Correct" : isNotAttempted ? "⚪ Not Attempted" : "✗ Wrong"}
+                            </span>
+                          </div>
+
+                          <p style={{ fontWeight: "700", color: "#1e293b", margin: "0 0 12px 0", fontSize: "14px" }}>
+                            {ans.question || ans.questionText || `Question ${idx + 1}`}
+                          </p>
+
+                          {/* Options */}
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "8px", marginBottom: "10px" }}>
+                            {(ans.options || ["Option A", "Option B", "Option C", "Option D"]).map((opt, optIdx) => {
+                              const isSelected = ans.selectedAnswer === optIdx;
+                              const isAnswer = (ans.correctAnswer !== undefined ? ans.correctAnswer : ans.correctOption) === optIdx;
+
+                              let optBg = "#ffffff";
+                              let optBorder = "#e2e8f0";
+                              let optColor = "#334155";
+                              let badge = null;
+
+                              if (isSelected && isAnswer) {
+                                optBg = "#dcfce7";
+                                optBorder = "#22c55e";
+                                optColor = "#15803d";
+                                badge = "✓ Student Answer (Correct)";
+                              } else if (isSelected && !isAnswer) {
+                                optBg = "#fee2e2";
+                                optBorder = "#ef4444";
+                                optColor = "#b91c1c";
+                                badge = "✗ Student Selected (Wrong)";
+                              } else if (isAnswer) {
+                                optBg = "#dcfce7";
+                                optBorder = "#86efac";
+                                optColor = "#15803d";
+                                badge = "✓ Correct Answer";
+                              }
+
+                              return (
+                                <div
+                                  key={optIdx}
+                                  style={{
+                                    padding: "9px 14px",
+                                    borderRadius: "8px",
+                                    border: `1.5px solid ${optBorder}`,
+                                    background: optBg,
+                                    color: optColor,
+                                    fontSize: "13px",
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    fontWeight: isSelected || isAnswer ? "700" : "500",
+                                  }}
+                                >
+                                  <span>{String.fromCharCode(65 + optIdx)}. {opt}</span>
+                                  {badge && (
+                                    <span style={{ fontSize: "11px", fontWeight: "800" }}>{badge}</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {ans.explanation && (
+                            <div
+                              style={{
+                                marginTop: "8px",
+                                padding: "10px 14px",
+                                borderRadius: "8px",
+                                background: "#ffffff",
+                                border: "1px solid #e2e8f0",
+                                fontSize: "12px",
+                                color: "#475569",
+                              }}
+                            >
+                              <strong style={{ color: "#7c3aed" }}>💡 Explanation: </strong>
+                              {ans.explanation}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div
+                style={{
+                  padding: "16px 28px",
+                  borderTop: "1px solid #e2e8f0",
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  background: "#f8fafc",
+                }}
+              >
+                <button
+                  onClick={() => setReviewModalStudent(null)}
+                  style={{
+                    padding: "10px 22px",
+                    borderRadius: "10px",
+                    background: "#7c3aed",
+                    color: "#ffffff",
+                    border: "none",
+                    fontWeight: "700",
+                    fontSize: "13px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Close Review
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

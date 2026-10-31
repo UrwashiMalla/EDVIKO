@@ -39,7 +39,60 @@ function StudentDashboard() {
   const [activePopup, setActivePopup] = useState(null);
   const messagesEndRef = useRef(null);
 
-  const studentKey = user?.id || user?._id || "default_student";
+  const studentKey = user?.id || user?._id || user?.email || "default_student";
+
+  const loadAllMessages = async () => {
+    // 1. Local fallback
+    setBroadcasts(getTeacherBroadcasts());
+    setDirectMessages(getDirectMessages(studentKey));
+
+    // 2. Fetch remote broadcasts and messages from MongoDB
+    try {
+      const [bRes, dmRes] = await Promise.all([
+        studentApi.getBroadcasts().catch(() => ({ broadcasts: [] })),
+        studentApi.getDirectMessages().catch(() => ({ messages: [] })),
+      ]);
+
+      if (bRes && bRes.broadcasts && bRes.broadcasts.length > 0) {
+        const formattedBroadcasts = bRes.broadcasts.map((b) => ({
+          id: b._id,
+          title: b.title,
+          content: b.text,
+          priority: b.priority,
+          tag: b.tag,
+          teacherName: b.senderName,
+          date: new Date(b.createdAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        }));
+        setBroadcasts(formattedBroadcasts);
+      }
+
+      if (dmRes && dmRes.messages && dmRes.messages.length > 0) {
+        const formattedDMs = dmRes.messages.map((m) => ({
+          id: m._id,
+          studentId: studentKey,
+          studentName: user?.name || "Student",
+          senderRole: m.senderRole,
+          senderName: m.senderName,
+          text: m.text,
+          timestamp: new Date(m.createdAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        }));
+        setDirectMessages(formattedDMs);
+      }
+    } catch (err) {
+      console.warn("Could not sync remote messages:", err.message);
+    }
+  };
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -54,10 +107,9 @@ function StudentDashboard() {
     };
 
     fetchDashboard();
-    setBroadcasts(getTeacherBroadcasts());
-    setDirectMessages(getDirectMessages(studentKey));
+    loadAllMessages();
 
-    const initialPopups = getStudentPopups(studentKey);
+    const initialPopups = getStudentPopups(studentKey, user?.email);
     if (initialPopups.length > 0) {
       setActivePopup(initialPopups[0]);
     }
@@ -71,20 +123,19 @@ function StudentDashboard() {
         detail.type === "NEW_STUDENT_POPUP" ||
         detail.type === "DIRECT_MESSAGE"
       ) {
-        const updated = getStudentPopups(studentKey);
+        const updated = getStudentPopups(studentKey, user?.email);
         if (updated.length > 0) {
           setActivePopup(updated[0]);
         }
-        setBroadcasts(getTeacherBroadcasts());
-        setDirectMessages(getDirectMessages(studentKey));
+        loadAllMessages();
       }
     });
     return unsubscribe;
-  }, [studentKey]);
+  }, [studentKey, user?.email]);
 
   useEffect(() => {
     if (showMessageTeacherModal) {
-      setDirectMessages(getDirectMessages(studentKey));
+      loadAllMessages();
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);
@@ -93,20 +144,30 @@ function StudentDashboard() {
 
   const handleDismissPopup = (popupId) => {
     dismissStudentPopup(popupId);
-    const remaining = getStudentPopups(studentKey).filter((p) => p.id !== popupId);
+    const remaining = getStudentPopups(studentKey, user?.email).filter((p) => p.id !== popupId);
     setActivePopup(remaining.length > 0 ? remaining[0] : null);
   };
 
-  const handleSendDirectMessage = (e) => {
+  const handleSendDirectMessage = async (e) => {
     e.preventDefault();
     if (!messageInput.trim()) return;
 
-    const teacherName = dashboardData?.profile?.teacherId?.name || "Prof. Sarah Jenkins";
+    const text = messageInput.trim();
+
+    // 1. Send via backend API to store in MongoDB
+    try {
+      await studentApi.sendDirectMessage({ text });
+    } catch (err) {
+      console.warn("Backend student DM error:", err.message);
+    }
+
+    // 2. Also save to frontend storage and dispatch event
     const updated = sendDirectMessage(studentKey, {
       senderRole: "student",
       senderName: user?.name || "Student",
-      text: messageInput.trim(),
+      text,
       studentName: user?.name || "Student",
+      studentEmail: user?.email,
     });
 
     setDirectMessages(updated);

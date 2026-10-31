@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { extractTextFromFile } from "../utils/documentExtractor";
+import { quizApi } from "../services/api";
 import {
   getTeacherQuizzes,
   uploadQuiz,
@@ -11,6 +13,8 @@ import {
   getUploadedLectures,
   uploadLecture,
   deleteLecture,
+  notifyLerniqSync,
+  onLerniqSync,
 } from "../services/frontendStorage";
 import Navbar from "./Navbar";
 
@@ -27,20 +31,32 @@ function TeacherDocuments() {
 
   // Quiz Form State
   const [quizTitle, setQuizTitle] = useState("");
+  const [quizDescription, setQuizDescription] = useState("");
   const [quizSubject, setQuizSubject] = useState("Artificial Intelligence");
   const [quizTimeLimit, setQuizTimeLimit] = useState(15);
   const [quizHasTimer, setQuizHasTimer] = useState(true);
   const [quizPassingScore, setQuizPassingScore] = useState(60);
   const [quizCreationMode, setQuizCreationMode] = useState("ai"); // "ai" or "manual"
   const [aiNotesText, setAiNotesText] = useState("");
+  const [uploadedFileName, setUploadedFileName] = useState("");
+  const [uploadedFileSize, setUploadedFileSize] = useState("");
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [fileError, setFileError] = useState("");
+
+  // Question Count: Dropdown options + custom manual input (1 to 30)
+  const [aiQuestionCountSelect, setAiQuestionCountSelect] = useState("5");
   const [aiQuestionCount, setAiQuestionCount] = useState(5);
   const [aiDifficulty, setAiDifficulty] = useState("Medium"); // "Easy", "Medium", "Difficult"
   const [isGeneratingAiQuiz, setIsGeneratingAiQuiz] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [previewQuizModal, setPreviewQuizModal] = useState(false);
+
   const [questionsList, setQuestionsList] = useState([
     {
       question: "",
       options: ["", "", "", ""],
       answerIndex: 0,
+      explanation: "",
     },
   ]);
 
@@ -65,10 +81,34 @@ function TeacherDocuments() {
     setTimeout(() => setToast(""), 3500);
   };
 
-  useEffect(() => {
+  const fetchQuizzes = async () => {
+    try {
+      const res = await quizApi.list();
+      if (res.success && res.quizzes) {
+        setQuizzes(res.quizzes);
+        return;
+      }
+    } catch (err) {
+      console.warn("Could not fetch remote quizzes, using local fallback:", err.message);
+    }
     setQuizzes(getTeacherQuizzes());
+  };
+
+  useEffect(() => {
+    fetchQuizzes();
     setNotes(getUploadedNotes());
     setLectures(getUploadedLectures());
+
+    const unsubscribe = onLerniqSync((detail) => {
+      if (
+        detail.type === "QUIZ_UPLOADED" ||
+        detail.type === "QUIZ_DELETED" ||
+        detail.type === "QUIZ_ATTEMPT_SUBMITTED"
+      ) {
+        fetchQuizzes();
+      }
+    });
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
@@ -91,6 +131,7 @@ function TeacherDocuments() {
         question: "",
         options: ["", "", "", ""],
         answerIndex: 0,
+        explanation: "",
       },
     ]);
   };
@@ -118,135 +159,202 @@ function TeacherDocuments() {
     setQuestionsList(updated);
   };
 
-  
-  // AI Quiz Generation from Uploaded Notes/Text
+  const handleExplanationChange = (qIdx, text) => {
+    const updated = [...questionsList];
+    updated[qIdx].explanation = text;
+    setQuestionsList(updated);
+  };
+
+  // Document File Upload (PDF, TXT, DOC, DOCX)
+  const handleNotesFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsUploadingFile(true);
+    setFileError("");
+
+    try {
+      const extracted = await extractTextFromFile(file);
+      if (!extracted || extracted.length < 20) {
+        throw new Error("Could not extract readable text from this file. Please make sure it is not empty.");
+      }
+      setAiNotesText(extracted);
+      setUploadedFileName(file.name);
+      setUploadedFileSize(`${(file.size / 1024).toFixed(1)} KB`);
+      showToast(`✓ Extracted text from "${file.name}" successfully!`);
+    } catch (err) {
+      console.error("Document read error:", err);
+      setFileError(err.message || "Failed to read document.");
+      showToast(err.message || "Failed to read document.");
+    } finally {
+      setIsUploadingFile(false);
+    }
+  };
+
+  // Dropdown count change
+  const handleDropdownCountChange = (e) => {
+    const val = e.target.value;
+    setAiQuestionCountSelect(val);
+    if (val !== "custom") {
+      setAiQuestionCount(Number(val));
+    }
+  };
+
+  // Custom question count manual input
+  const handleCustomCountChange = (e) => {
+    const raw = e.target.value;
+    if (raw === "") {
+      setAiQuestionCount("");
+      setAiQuestionCountSelect("custom");
+      return;
+    }
+    const num = parseInt(raw, 10);
+    setAiQuestionCount(isNaN(num) ? "" : num);
+    setAiQuestionCountSelect("custom");
+  };
+
+  // AI Quiz Generation from Uploaded Document / Notes via Backend Groq API
   const handleGenerateQuizFromNotes = async () => {
     if (!aiNotesText.trim()) {
-      showToast("Please paste or upload study notes first to generate the quiz.");
+      showToast("Please upload a document (PDF, TXT, DOC, DOCX) or paste study text first.");
+      return;
+    }
+
+    const count = parseInt(aiQuestionCount, 10);
+    if (isNaN(count) || count < 1 || count > 30) {
+      showToast("Question count must be between 1 and 30.");
       return;
     }
 
     setIsGeneratingAiQuiz(true);
     try {
-      const notes = aiNotesText.trim();
-      const count = Number(aiQuestionCount) || 5;
+      const res = await quizApi.generatePreview({
+        text: aiNotesText.trim(),
+        questionCount: count,
+        difficulty: aiDifficulty,
+        language: "English",
+      });
 
-      // Extract key sentences / topics from notes
-      const lines = notes
-        .split(/[\n.]+/)
-        .map((l) => l.trim())
-        .filter((l) => l.length > 20);
-
-      const generated = [];
-      const topics = lines.length > 0 ? lines : [
-        "Core fundamental concepts and operational principles",
-        "Performance optimization and algorithmic complexity",
-        "Practical implementation constraints and edge cases",
-        "Key comparative trade-offs in modern computing",
-        "Best practices and standard engineering methodologies",
-      ];
-
-      for (let i = 0; i < count; i++) {
-        const topic = topics[i % topics.length];
-        const snippet = topic.slice(0, 80);
-
-        if (aiDifficulty === "Easy") {
-          generated.push({
-            question: `Based on the notes regarding "${snippet}...", which statement is TRUE?`,
-            options: [
-              `It represents the primary foundational definition stated in the study notes.`,
-              `It has no practical relation to the subject curriculum.`,
-              `It is completely deprecated in modern system architectures.`,
-              `It can only be computed with exponential overhead.`,
-            ],
-            answerIndex: 0,
-            explanation: `Directly referenced in the uploaded study notes: ${snippet}`,
-          });
-        } else if (aiDifficulty === "Difficult") {
-          generated.push({
-            question: `Deep Analysis: Given the concepts in "${snippet}...", what is the critical design trade-off?`,
-            options: [
-              `Trade-off between time complexity overhead and memory spatial locality.`,
-              `Unconstrained asymptotic runtime with constant space guarantees.`,
-              `Complete divergence from standard algorithmic invariants.`,
-              `Strict linear scalability without any dependency synchronization.`,
-            ],
-            answerIndex: 0,
-            explanation: `Advanced conceptual synthesis based on the provided notes.`,
-          });
-        } else {
-          // Medium
-          generated.push({
-            question: `According to the study material on "${snippet}...", what is the recommended approach?`,
-            options: [
-              `Apply the verified methodology outlined in the lecture notes.`,
-              `Bypass algorithmic heuristics in favor of brute-force evaluation.`,
-              `Ignore constraint boundaries when scaling inputs.`,
-              `Use arbitrary unvalidated heuristics without convergence proof.`,
-            ],
-            answerIndex: 0,
-            explanation: `Medium-level comprehension question based on instructor notes.`,
-          });
-        }
+      if (!res.success || !Array.isArray(res.questions) || res.questions.length === 0) {
+        throw new Error(res.message || "AI failed to generate quiz questions.");
       }
 
-      setQuestionsList(generated);
+      const formatted = res.questions.map((q) => ({
+        question: q.question,
+        options: Array.isArray(q.options) && q.options.length === 4 ? q.options : ["A", "B", "C", "D"],
+        answerIndex: typeof q.correctAnswer === "number" ? q.correctAnswer : 0,
+        explanation: q.explanation || "",
+      }));
+
+      setQuestionsList(formatted);
       if (!quizTitle.trim()) {
-        setQuizTitle(`${quizSubject} Assessment (${aiDifficulty} - ${count} Questions)`);
+        const docBaseName = uploadedFileName ? uploadedFileName.replace(/\.[^/.]+$/, "") : quizSubject;
+        setQuizTitle(`${docBaseName} Quiz (${aiDifficulty} - ${formatted.length} Questions)`);
       }
-      showToast(`✨ Successfully generated ${count} ${aiDifficulty} questions from your notes!`);
+      showToast(`✨ Generated ${formatted.length} diverse, non-repetitive ${aiDifficulty} questions!`);
     } catch (err) {
-      showToast("Failed to generate quiz. Please check notes text.");
+      console.error("AI Generation Error:", err);
+      showToast("Failed to generate AI quiz: " + (err.message || "Check API connection."));
     } finally {
       setIsGeneratingAiQuiz(false);
     }
   };
 
-  const handleNotesFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setAiNotesText(event.target.result || "");
-      showToast(`Loaded text from "${file.name}" into notes block!`);
-    };
-    reader.readAsText(file);
-  };
+  // Publish Quiz to Classroom & MongoDB
+  const handlePublishQuiz = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
 
-  const handlePublishQuiz = (e) => {
-    e.preventDefault();
     if (!quizTitle.trim()) {
       showToast("Please enter a quiz title.");
       return;
     }
 
+    // Validate questions
     const validQuestions = questionsList.filter((q) => q.question.trim().length > 0);
-    const finalQuestions = validQuestions.length > 0 ? validQuestions : [
-      {
-        question: `Comprehensive evaluation question on ${quizTitle}: Identify the primary algorithm trait.`,
-        options: ["Optimality & Completeness", "Exponential Search Space", "Unbounded Memory", "Greedy Suboptimal Step"],
-        answerIndex: 0,
-      },
-    ];
+    if (validQuestions.length === 0) {
+      showToast("Please add at least one question before publishing.");
+      return;
+    }
 
-    const updated = uploadQuiz({
-      title: quizTitle.trim(),
-      subject: quizSubject,
-      timeLimit: quizHasTimer ? Math.max(1, Number(quizTimeLimit) || 1) : null,
-      passingScore: quizPassingScore,
-      difficulty: aiDifficulty,
-      questions: finalQuestions,
-    });
+    for (let i = 0; i < validQuestions.length; i++) {
+      const q = validQuestions[i];
+      for (let j = 0; j < 4; j++) {
+        if (!q.options[j] || !q.options[j].trim()) {
+          showToast(`Question #${i + 1} has an empty Option ${String.fromCharCode(65 + j)}.`);
+          return;
+        }
+      }
+      if (typeof q.answerIndex !== "number" || q.answerIndex < 0 || q.answerIndex > 3) {
+        showToast(`Please select a correct answer option for Question #${i + 1}.`);
+        return;
+      }
+    }
 
-    setQuizzes(updated);
-    setQuizTitle("");
-    setQuestionsList([{ question: "", options: ["", "", "", ""], answerIndex: 0 }]);
-    showToast("🎯 Quiz published successfully! Students can now attempt it.");
+    setIsPublishing(true);
+
+    const questionsPayload = validQuestions.map((q) => ({
+      question: q.question.trim(),
+      options: q.options.map((opt) => opt.trim()),
+      correctAnswer: q.answerIndex,
+      explanation: q.explanation ? q.explanation.trim() : "",
+    }));
+
+    try {
+      const payload = {
+        title: quizTitle.trim(),
+        description: quizDescription.trim(),
+        subject: quizSubject,
+        timeLimit: quizHasTimer ? Math.max(1, Number(quizTimeLimit) || 1) : null,
+        passingScore: Number(quizPassingScore) || 60,
+        difficulty: aiDifficulty,
+        questions: questionsPayload,
+      };
+
+      const res = await quizApi.publish(payload);
+
+      // Also sync to frontendStorage for instant cross-tab live updates
+      uploadQuiz({
+        id: res.quiz?.id || `quiz-${Date.now()}`,
+        title: payload.title,
+        subject: payload.subject,
+        timeLimit: payload.timeLimit,
+        passingScore: payload.passingScore,
+        difficulty: payload.difficulty,
+        questions: questionsPayload,
+      });
+
+      notifyLerniqSync("QUIZ_UPLOADED", res.quiz || payload);
+
+      setPreviewQuizModal(false);
+      setQuizTitle("");
+      setQuizDescription("");
+      setQuestionsList([{ question: "", options: ["", "", "", ""], answerIndex: 0, explanation: "" }]);
+      setAiNotesText("");
+      setUploadedFileName("");
+      await fetchQuizzes();
+      showToast("🎯 Quiz published to MongoDB! All classroom students have been notified.");
+    } catch (err) {
+      console.error("Quiz Publish Error:", err);
+      showToast("Failed to publish quiz: " + (err.message || "Server error."));
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
-  const handleDeleteQuiz = (id) => {
-    const updated = deleteQuiz(id);
-    setQuizzes(updated);
+  const handleDeleteQuiz = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this quiz and all student submissions?")) {
+      return;
+    }
+
+    try {
+      await quizApi.delete(id);
+    } catch (err) {
+      console.warn("Backend quiz delete error:", err.message);
+    }
+
+    deleteQuiz(id);
+    notifyLerniqSync("QUIZ_DELETED", { id });
+    await fetchQuizzes();
     showToast("Quiz removed from course curriculum.");
   };
 
@@ -530,7 +638,7 @@ function TeacherDocuments() {
 
               
               {/* Quiz Generation Mode Switcher */}
-              <div style={{ display: "flex", gap: "10px", marginBottom: "24px" }}>
+              <div style={{ display: "flex", gap: "10px", marginBottom: "24px", flexWrap: "wrap" }}>
                 <button
                   type="button"
                   onClick={() => setQuizCreationMode("ai")}
@@ -549,7 +657,7 @@ function TeacherDocuments() {
                   }}
                 >
                   <span>🤖</span>
-                  <span>Option 1: Upload Notes & Generate Quiz with AI</span>
+                  <span>Option 1: Upload Document & Generate with AI</span>
                 </button>
                 <button
                   type="button"
@@ -584,39 +692,57 @@ function TeacherDocuments() {
                     marginBottom: "28px",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", flexWrap: "wrap", gap: "10px" }}>
                     <div>
                       <h3 style={{ fontSize: "16px", fontWeight: "800", color: "#5b21b6", margin: 0 }}>
-                        Upload or Paste Notes for Instant AI Quiz Generation
+                        Upload Document for AI Quiz Generation (PDF, TXT, DOC, DOCX)
                       </h3>
                       <p style={{ color: "#64748b", fontSize: "13px", margin: "4px 0 0 0" }}>
-                        AI reads your notes and automatically structures multiple-choice questions with answers & explanations.
+                        Groq AI analyzes the document across topics to generate diverse, non-repetitive multiple-choice questions.
                       </p>
                     </div>
+
                     <label
                       style={{
-                        padding: "8px 14px",
-                        background: "#ede9fe",
+                        padding: "9px 16px",
+                        background: isUploadingFile ? "#cbd5e1" : "#ede9fe",
                         color: "#6d28d9",
                         borderRadius: "10px",
-                        fontSize: "12px",
+                        fontSize: "13px",
                         fontWeight: "700",
-                        cursor: "pointer",
+                        cursor: isUploadingFile ? "default" : "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
                       }}
                     >
-                      📁 Upload Notes File (.txt)
+                      <span>{isUploadingFile ? "⏳ Reading Document..." : "📁 Upload Document"}</span>
                       <input
                         type="file"
-                        accept=".txt,.md"
+                        accept=".pdf,.docx,.doc,.txt,.text"
                         onChange={handleNotesFileUpload}
+                        disabled={isUploadingFile}
                         style={{ display: "none" }}
                       />
                     </label>
                   </div>
 
+                  {uploadedFileName && (
+                    <div style={{ marginBottom: "14px", padding: "8px 14px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#166534" }}>
+                      <span>📄 Document: <strong>{uploadedFileName}</strong> ({uploadedFileSize})</span>
+                      <span>• {aiNotesText.split(/\s+/).filter(Boolean).length} words extracted</span>
+                    </div>
+                  )}
+
+                  {fileError && (
+                    <div style={{ marginBottom: "14px", padding: "8px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", fontSize: "13px", color: "#b91c1c" }}>
+                      ⚠️ {fileError}
+                    </div>
+                  )}
+
                   <textarea
                     rows={4}
-                    placeholder="Paste lecture notes, chapter summaries, key definitions, or formulas here..."
+                    placeholder="Or paste study text directly here (lecture notes, chapter excerpts, syllabus concepts, formulas)..."
                     value={aiNotesText}
                     onChange={(e) => setAiNotesText(e.target.value)}
                     style={{
@@ -631,23 +757,51 @@ function TeacherDocuments() {
                     }}
                   />
 
-                  {/* AI Generation Settings: No. of Questions & Medium/Difficulty */}
-                  <div style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
+                  {/* AI Generation Settings: Question Count (Dropdown + Custom Input) & Difficulty */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "16px", alignItems: "flex-end" }}>
+                    {/* Dropdown containing question-count options */}
                     <div>
                       <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "4px" }}>
-                        Number of Questions to Generate:
+                        Questions Count (Dropdown):
                       </label>
                       <select
-                        value={aiQuestionCount}
-                        onChange={(e) => setAiQuestionCount(Number(e.target.value))}
-                        style={{ padding: "8px 12px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13px", fontWeight: "700" }}
+                        value={aiQuestionCountSelect}
+                        onChange={handleDropdownCountChange}
+                        style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13px", fontWeight: "700", background: "#fff" }}
                       >
-                        <option value={3}>3 Questions</option>
-                        <option value={5}>5 Questions (Recommended)</option>
-                        <option value={8}>8 Questions</option>
-                        <option value={10}>10 Questions</option>
-                        <option value={15}>15 Questions</option>
+                        <option value="5">5 Questions (Quick Check)</option>
+                        <option value="10">10 Questions (Standard)</option>
+                        <option value="15">15 Questions (Midterm)</option>
+                        <option value="20">20 Questions (Comprehensive)</option>
+                        <option value="25">25 Questions (In-depth)</option>
+                        <option value="30">30 Questions (Maximum)</option>
+                        <option value="custom">Custom Count (1 - 30)...</option>
                       </select>
+                    </div>
+
+                    {/* Custom input field where teachers can manually enter the number of questions */}
+                    <div>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "4px" }}>
+                        Manual / Custom Count (1 - 30):
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        placeholder="e.g. 7"
+                        value={aiQuestionCount}
+                        onChange={handleCustomCountChange}
+                        style={{
+                          width: "100%",
+                          padding: "8px 12px",
+                          borderRadius: "8px",
+                          border: (aiQuestionCount < 1 || aiQuestionCount > 30) ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1",
+                          fontSize: "13px",
+                          fontWeight: "700",
+                          boxSizing: "border-box",
+                          background: "#fff",
+                        }}
+                      />
                     </div>
 
                     <div>
@@ -657,43 +811,51 @@ function TeacherDocuments() {
                       <select
                         value={aiDifficulty}
                         onChange={(e) => setAiDifficulty(e.target.value)}
-                        style={{ padding: "8px 12px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13px", fontWeight: "700" }}
+                        style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13px", fontWeight: "700", background: "#fff" }}
                       >
-                        <option value="Easy">Easy (Foundational & Definitions)</option>
-                        <option value="Medium">Medium (Application & Standard Concepts)</option>
-                        <option value="Difficult">Difficult (Complex Synthesis & Problem Solving)</option>
+                        <option value="Easy">Easy (Definitions & Fundamentals)</option>
+                        <option value="Medium">Medium (Conceptual & Application)</option>
+                        <option value="Difficult">Difficult (Advanced Synthesis & Analysis)</option>
                       </select>
                     </div>
 
-                    <div style={{ alignSelf: "flex-end" }}>
+                    <div>
                       <button
                         type="button"
                         onClick={handleGenerateQuizFromNotes}
-                        disabled={isGeneratingAiQuiz}
+                        disabled={isGeneratingAiQuiz || aiQuestionCount < 1 || aiQuestionCount > 30}
                         style={{
-                          padding: "10px 22px",
-                          background: isGeneratingAiQuiz ? "#cbd5e1" : "linear-gradient(135deg, #7c3aed, #6d28d9)",
+                          width: "100%",
+                          padding: "10px 20px",
+                          background: (isGeneratingAiQuiz || aiQuestionCount < 1 || aiQuestionCount > 30) ? "#cbd5e1" : "linear-gradient(135deg, #7c3aed, #6d28d9)",
                           color: "#ffffff",
                           border: "none",
                           borderRadius: "10px",
                           fontWeight: "800",
                           fontSize: "13px",
-                          cursor: isGeneratingAiQuiz ? "default" : "pointer",
+                          cursor: (isGeneratingAiQuiz || aiQuestionCount < 1 || aiQuestionCount > 30) ? "not-allowed" : "pointer",
                           boxShadow: "0 4px 12px rgba(124, 58, 237, 0.3)",
                         }}
                       >
-                        {isGeneratingAiQuiz ? "Generating Questions..." : "✨ Generate Quiz with AI"}
+                        {isGeneratingAiQuiz ? "⚡ Generating Questions..." : `✨ Generate ${aiQuestionCount || 0} Questions`}
                       </button>
                     </div>
                   </div>
+
+                  {(aiQuestionCount < 1 || aiQuestionCount > 30) && (
+                    <small style={{ color: "#dc2626", fontWeight: "700", display: "block", marginTop: "6px" }}>
+                      ⚠️ Please specify a question count between 1 and 30.
+                    </small>
+                  )}
                 </div>
               )}
 
+              {/* QUIZ CONFIGURATION & BUILDER FORM */}
               <form onSubmit={handlePublishQuiz}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "24px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "18px" }}>
                   <div>
                     <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                      Quiz Title
+                      Quiz Title *
                     </label>
                     <input
                       type="text"
@@ -718,14 +880,15 @@ function TeacherDocuments() {
                       <option value="Deep Learning">Deep Learning</option>
                       <option value="Database Systems">Database Systems</option>
                       <option value="Computer Networks">Computer Networks</option>
+                      <option value="General">General Academics</option>
                     </select>
                   </div>
 
-                  {/* TIMER: MINIMUM 1 MIN + OPTION TO NOT ADD ANY TIMER */}
+                  {/* TIMER: MINIMUM 1 MIN + OPTION FOR UNLIMITED TIME */}
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                       <label style={{ fontSize: "13px", fontWeight: "700", color: "#334155" }}>
-                        Quiz Timer
+                        Time Limit
                       </label>
                       <label style={{ fontSize: "11px", color: "#6d28d9", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
                         <input
@@ -733,7 +896,7 @@ function TeacherDocuments() {
                           checked={!quizHasTimer}
                           onChange={(e) => setQuizHasTimer(!e.target.checked)}
                         />
-                        No Timer
+                        Unlimited Time
                       </label>
                     </div>
                     {quizHasTimer ? (
@@ -760,14 +923,14 @@ function TeacherDocuments() {
                           boxSizing: "border-box",
                         }}
                       >
-                        ⏱️ Untimed (No Timer)
+                        ⏱️ Unlimited Time (No countdown)
                       </div>
                     )}
                   </div>
 
                   <div>
                     <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                      Pass Score (%)
+                      Passing Score (%)
                     </label>
                     <input
                       type="number"
@@ -780,18 +943,31 @@ function TeacherDocuments() {
                   </div>
                 </div>
 
-                {/* Question Builder */}
                 <div style={{ marginBottom: "20px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                    <label style={{ fontSize: "14px", fontWeight: "800", color: "#4c1d95" }}>
-                      Questions ({questionsList.length})
+                  <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                    Description / Instructions (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Read Chapter 3 before attempting. Each question carries equal marks."
+                    value={quizDescription}
+                    onChange={(e) => setQuizDescription(e.target.value)}
+                    style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "13px", boxSizing: "border-box" }}
+                  />
+                </div>
+
+                {/* Question Builder */}
+                <div style={{ marginBottom: "24px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                    <label style={{ fontSize: "15px", fontWeight: "800", color: "#4c1d95" }}>
+                      Questions List ({questionsList.length} {questionsList.length === 1 ? "Question" : "Questions"})
                     </label>
                     <button
                       type="button"
                       onClick={addQuestionField}
-                      style={{ padding: "6px 14px", background: "#ede9fe", color: "#6d28d9", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: "700", cursor: "pointer" }}
+                      style={{ padding: "8px 16px", background: "#ede9fe", color: "#6d28d9", border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "700", cursor: "pointer" }}
                     >
-                      + Add Another Question
+                      + Add Question
                     </button>
                   </div>
 
@@ -807,16 +983,16 @@ function TeacherDocuments() {
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                        <span style={{ fontWeight: "700", fontSize: "13px", color: "#6d28d9" }}>
-                          Question {qIdx + 1}
+                        <span style={{ fontWeight: "800", fontSize: "14px", color: "#6d28d9" }}>
+                          Question #{qIdx + 1}
                         </span>
                         {questionsList.length > 1 && (
                           <button
                             type="button"
                             onClick={() => removeQuestionField(qIdx)}
-                            style={{ background: "none", border: "none", color: "#ef4444", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}
+                            style={{ background: "#fee2e2", border: "none", color: "#b91c1c", padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "700", cursor: "pointer" }}
                           >
-                            Remove Question
+                            ✕ Remove
                           </button>
                         )}
                       </div>
@@ -826,66 +1002,220 @@ function TeacherDocuments() {
                         placeholder="Write the question prompt here..."
                         value={q.question}
                         onChange={(e) => handleQuestionChange(qIdx, e.target.value)}
-                        style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", boxSizing: "border-box", marginBottom: "12px" }}
+                        style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px", boxSizing: "border-box", marginBottom: "12px", fontWeight: "600" }}
                         required
                       />
 
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px", marginBottom: "10px" }}>
                         {q.options.map((opt, optIdx) => (
-                          <div key={optIdx} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div
+                            key={optIdx}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              padding: "6px 10px",
+                              borderRadius: "8px",
+                              background: q.answerIndex === optIdx ? "#f0fdf4" : "#ffffff",
+                              border: q.answerIndex === optIdx ? "1.5px solid #10b981" : "1px solid #cbd5e1",
+                            }}
+                          >
                             <input
                               type="radio"
                               name={`correct_${qIdx}`}
                               checked={q.answerIndex === optIdx}
                               onChange={() => handleCorrectOptionChange(qIdx, optIdx)}
-                              title="Select as correct option"
+                              style={{ cursor: "pointer" }}
+                              title="Mark as correct answer"
                             />
+                            <span style={{ fontSize: "12px", fontWeight: "800", color: q.answerIndex === optIdx ? "#059669" : "#64748b" }}>
+                              {String.fromCharCode(65 + optIdx)}
+                            </span>
                             <input
                               type="text"
-                              placeholder={`Option ${String.fromCharCode(65 + optIdx)}`}
+                              placeholder={`Option ${String.fromCharCode(65 + optIdx)} text...`}
                               value={opt}
                               onChange={(e) => handleOptionChange(qIdx, optIdx, e.target.value)}
-                              style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px" }}
+                              style={{ flex: 1, padding: "6px 8px", border: "none", background: "transparent", fontSize: "13px", outline: "none" }}
                               required
                             />
                           </div>
                         ))}
                       </div>
-                      <small style={{ display: "block", marginTop: "8px", color: "#64748b", fontSize: "11px" }}>
-                        Select the radio button next to the option that is the correct answer.
-                      </small>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "8px" }}>
+                        <span style={{ fontSize: "12px", color: "#64748b", fontWeight: "700" }}>Explanation:</span>
+                        <input
+                          type="text"
+                          placeholder="Brief explanation for why the selected answer is correct (optional)"
+                          value={q.explanation || ""}
+                          onChange={(e) => handleExplanationChange(qIdx, e.target.value)}
+                          style={{ flex: 1, padding: "6px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px" }}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                {/* Form Buttons: Preview & Publish */}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={() => setPreviewQuizModal(true)}
                     style={{
-                      padding: "12px 28px",
-                      background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-                      color: "#fff",
+                      padding: "12px 24px",
+                      background: "#ede9fe",
+                      color: "#6d28d9",
                       border: "none",
                       borderRadius: "12px",
                       fontWeight: "700",
-                      fontSize: "15px",
+                      fontSize: "14px",
                       cursor: "pointer",
+                    }}
+                  >
+                    👁️ Preview Quiz
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isPublishing}
+                    style={{
+                      padding: "12px 28px",
+                      background: isPublishing ? "#cbd5e1" : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "12px",
+                      fontWeight: "800",
+                      fontSize: "15px",
+                      cursor: isPublishing ? "default" : "pointer",
                       boxShadow: "0 4px 14px rgba(16, 185, 129, 0.3)",
                     }}
                   >
-                    Publish Quiz to Class →
+                    {isPublishing ? "Publishing to Classroom..." : "Publish Quiz to Classroom →"}
                   </button>
                 </div>
               </form>
             </div>
 
+            {/* PREVIEW MODAL */}
+            {previewQuizModal && (
+              <div
+                style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: "rgba(0,0,0,0.6)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 99999,
+                  padding: "20px",
+                }}
+              >
+                <div
+                  style={{
+                    background: "#fff",
+                    borderRadius: "20px",
+                    maxWidth: "800px",
+                    width: "100%",
+                    maxHeight: "85vh",
+                    overflowY: "auto",
+                    padding: "32px",
+                    boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+                    <div>
+                      <span style={{ fontSize: "11px", fontWeight: "800", background: "#ede9fe", color: "#6d28d9", padding: "3px 8px", borderRadius: "6px", textTransform: "uppercase" }}>
+                        QUIZ PREVIEW
+                      </span>
+                      <h2 style={{ fontSize: "22px", fontWeight: "800", color: "#1e293b", margin: "6px 0 2px 0" }}>
+                        {quizTitle || "Untitled Quiz"}
+                      </h2>
+                      {quizDescription && (
+                        <p style={{ color: "#64748b", fontSize: "13px", margin: "0 0 6px 0" }}>{quizDescription}</p>
+                      )}
+                      <div style={{ display: "flex", gap: "12px", fontSize: "12px", color: "#64748b", marginTop: "6px" }}>
+                        <span>📚 {quizSubject}</span>
+                        <span>⏱️ {quizHasTimer ? `${quizTimeLimit} mins` : "Unlimited Time"}</span>
+                        <span>🎯 Pass: {quizPassingScore}%</span>
+                        <span>❓ {questionsList.length} Questions</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setPreviewQuizModal(false)}
+                      style={{ background: "#f1f5f9", border: "none", borderRadius: "50%", width: "32px", height: "32px", cursor: "pointer", fontSize: "14px" }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <hr style={{ border: "none", borderTop: "1px solid #f1f5f9", margin: "16px 0" }} />
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    {questionsList.map((q, idx) => (
+                      <div key={idx} style={{ padding: "16px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontWeight: "700", fontSize: "14px", color: "#1e293b", marginBottom: "10px" }}>
+                          Q{idx + 1}. {q.question || "No question prompt entered."}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "10px" }}>
+                          {q.options.map((opt, optIdx) => (
+                            <div
+                              key={optIdx}
+                              style={{
+                                padding: "8px 12px",
+                                borderRadius: "8px",
+                                background: q.answerIndex === optIdx ? "#dcfce7" : "#ffffff",
+                                border: q.answerIndex === optIdx ? "1.5px solid #16a34a" : "1px solid #cbd5e1",
+                                fontSize: "13px",
+                                color: q.answerIndex === optIdx ? "#15803d" : "#334155",
+                                fontWeight: q.answerIndex === optIdx ? "700" : "500",
+                              }}
+                            >
+                              <strong>{String.fromCharCode(65 + optIdx)}.</strong> {opt || "(Empty option)"}
+                              {q.answerIndex === optIdx && <span style={{ marginLeft: "8px" }}>✓ Correct</span>}
+                            </div>
+                          ))}
+                        </div>
+                        {q.explanation && (
+                          <div style={{ fontSize: "12px", color: "#065f46", background: "#ecfdf5", padding: "6px 10px", borderRadius: "6px" }}>
+                            💡 Explanation: {q.explanation}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "24px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewQuizModal(false)}
+                      style={{ padding: "10px 20px", background: "#f1f5f9", color: "#475569", border: "none", borderRadius: "10px", fontWeight: "700", cursor: "pointer" }}
+                    >
+                      Back to Editing
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePublishQuiz}
+                      disabled={isPublishing}
+                      style={{ padding: "10px 24px", background: "linear-gradient(135deg, #10b981 0%, #059669 100%)", color: "#fff", border: "none", borderRadius: "10px", fontWeight: "800", cursor: "pointer" }}
+                    >
+                      {isPublishing ? "Publishing..." : "Publish Quiz to Classroom →"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* History of Conducted Quizzes */}
             <div style={{ background: "#ffffff", borderRadius: "20px", padding: "32px", border: "1px solid #f3e8ff", boxShadow: "0 4px 20px rgba(0,0,0,0.03)" }}>
               <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#1e293b", margin: "0 0 4px 0" }}>
-                Conducted Quizzes History
+                Classroom Quizzes History
               </h2>
               <p style={{ color: "#64748b", fontSize: "14px", margin: "0 0 20px 0" }}>
-                All quizzes active in your class with deletion control and direct link to quiz analytics.
+                All quizzes active in your class, saved in MongoDB and visible to students registered in your classroom.
               </p>
 
               {quizzes.length === 0 ? (
@@ -894,70 +1224,84 @@ function TeacherDocuments() {
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                  {quizzes.map((q) => (
-                    <div
-                      key={q.id}
-                      style={{
-                        padding: "20px",
-                        background: "#fbfaff",
-                        borderRadius: "16px",
-                        border: "1px solid #f3e8ff",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                        gap: "14px",
-                      }}
-                    >
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
-                          <span style={{ fontSize: "11px", fontWeight: "700", background: "#ecfdf5", color: "#065f46", padding: "3px 8px", borderRadius: "6px" }}>
-                            {q.subject}
-                          </span>
-                          <strong style={{ fontSize: "16px", color: "#1e293b" }}>{q.title}</strong>
+                  {quizzes.map((q) => {
+                    const qId = q.id || q._id;
+                    const attemptedCount = q.studentRoster ? q.studentRoster.filter((s) => s.attempted).length : (q.totalAttempts || 0);
+                    const totalRosterCount = q.studentRoster ? q.studentRoster.length : 0;
+
+                    return (
+                      <div
+                        key={qId}
+                        style={{
+                          padding: "20px",
+                          background: "#fbfaff",
+                          borderRadius: "16px",
+                          border: "1px solid #f3e8ff",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: "14px",
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
+                            <span style={{ fontSize: "11px", fontWeight: "700", background: "#ecfdf5", color: "#065f46", padding: "3px 8px", borderRadius: "6px" }}>
+                              {q.subject || "Academics"}
+                            </span>
+                            {q.classroomCode && (
+                              <span style={{ fontSize: "11px", fontWeight: "700", background: "#ede9fe", color: "#6d28d9", padding: "3px 8px", borderRadius: "6px" }}>
+                                🏫 {q.classroomCode}
+                              </span>
+                            )}
+                            <strong style={{ fontSize: "16px", color: "#1e293b" }}>{q.title}</strong>
+                          </div>
+                          {q.description && (
+                            <p style={{ margin: "2px 0 6px 0", fontSize: "13px", color: "#64748b" }}>{q.description}</p>
+                          )}
+                          <div style={{ fontSize: "13px", color: "#64748b", display: "flex", gap: "14px", marginTop: "4px", flexWrap: "wrap" }}>
+                            <span>❓ {q.questionCount || (q.questions ? q.questions.length : 0)} Questions</span>
+                            <span>⏱️ {q.timeLimit ? `${q.timeLimit} Mins Limit` : "Untimed"}</span>
+                            <span>🎯 Pass: {q.passingScore}%</span>
+                            <span>👥 Attempts: <strong>{attemptedCount}{totalRosterCount > 0 ? ` / ${totalRosterCount}` : ""}</strong></span>
+                          </div>
                         </div>
-                        <div style={{ fontSize: "13px", color: "#64748b", display: "flex", gap: "14px", marginTop: "4px" }}>
-                          <span>❓ {q.questionCount} Questions</span>
-                          <span>⏱️ {q.timeLimit} Mins Limit</span>
-                          <span>🎯 Pass: {q.passingScore}%</span>
-                          <span>📅 Published: {q.date}</span>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <Link
+                            to={`/teacher/quiz-results?quizId=${qId}`}
+                            style={{
+                              padding: "8px 16px",
+                              background: "#ede9fe",
+                              color: "#6d28d9",
+                              borderRadius: "10px",
+                              fontSize: "13px",
+                              fontWeight: "700",
+                              textDecoration: "none",
+                            }}
+                          >
+                            View Results ({attemptedCount}) →
+                          </Link>
+
+                          <button
+                            onClick={() => handleDeleteQuiz(qId)}
+                            style={{
+                              padding: "8px 14px",
+                              background: "#fee2e2",
+                              color: "#b91c1c",
+                              border: "none",
+                              borderRadius: "10px",
+                              fontSize: "13px",
+                              fontWeight: "700",
+                              cursor: "pointer",
+                            }}
+                          >
+                            Delete
+                          </button>
                         </div>
                       </div>
-
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <Link
-                          to={`/teacher/quiz-results?quizId=${q.id}`}
-                          style={{
-                            padding: "8px 16px",
-                            background: "#ede9fe",
-                            color: "#6d28d9",
-                            borderRadius: "10px",
-                            fontSize: "13px",
-                            fontWeight: "700",
-                            textDecoration: "none",
-                          }}
-                        >
-                          View Results →
-                        </Link>
-
-                        <button
-                          onClick={() => handleDeleteQuiz(q.id)}
-                          style={{
-                            padding: "8px 14px",
-                            background: "#fee2e2",
-                            color: "#b91c1c",
-                            border: "none",
-                            borderRadius: "10px",
-                            fontSize: "13px",
-                            fontWeight: "700",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Delete Quiz
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

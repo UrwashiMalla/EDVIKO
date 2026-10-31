@@ -17,6 +17,7 @@ const aiRoutes = require("./routes/aiRoutes");
 const quizRoutes = require("./routes/quizRoutes");
 const studentRoutes = require("./routes/studentRoutes");
 const teacherRoutes = require("./routes/teacherRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -83,6 +84,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/quizzes", quizRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/teachers", teacherRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // ==========================================
 // ERROR HANDLING

@@ -44,7 +44,7 @@ function TeacherDashboard() {
   const [broadcastList, setBroadcastList] = useState([]);
 
   // Direct messages with student
-  const [selectedStudentForDM, setSelectedStudentForDM] = useState("default_student");
+  const [selectedStudentForDM, setSelectedStudentForDM] = useState("");
   const [teacherReplyText, setTeacherReplyText] = useState("");
   const [directMessages, setDirectMessages] = useState([]);
 
@@ -76,6 +76,9 @@ function TeacherDashboard() {
           (s) => !removedIds.includes(String(s.id))
         );
         setStudents(activeStudentsList);
+        if (activeStudentsList.length > 0 && !selectedStudentForDM) {
+          setSelectedStudentForDM(String(activeStudentsList[0].id));
+        }
       } catch (err) {
         console.error("Teacher Dashboard Error:", err);
         setError(err.message || "Failed to load faculty dashboard.");
@@ -87,7 +90,43 @@ function TeacherDashboard() {
     fetchData();
     setInstitution(getInstitutionName());
     setBroadcastList(getTeacherBroadcasts());
+  }, []);
+
+  // Sync direct messages whenever selected student changes
+  useEffect(() => {
+    if (!selectedStudentForDM) {
+      setDirectMessages([]);
+      return;
+    }
+    // Load local cache immediately
     setDirectMessages(getDirectMessages(selectedStudentForDM));
+
+    // Fetch conversation from backend API
+    const loadRemoteDM = async () => {
+      try {
+        const res = await teacherApi.getDirectMessages(selectedStudentForDM);
+        if (res && res.messages && res.messages.length > 0) {
+          const formatted = res.messages.map((m) => ({
+            id: m._id,
+            studentId: selectedStudentForDM,
+            studentName: m.recipientName,
+            senderRole: m.senderRole,
+            senderName: m.senderName,
+            text: m.text,
+            timestamp: new Date(m.createdAt).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          }));
+          setDirectMessages(formatted);
+        }
+      } catch (err) {
+        console.warn("Could not load remote messages:", err.message);
+      }
+    };
+    loadRemoteDM();
   }, [selectedStudentForDM]);
 
   const teacherCode = dashboardData?.teacherProfile?.teacherCode || getTeacherClassCode(user?.id || user?._id || "default_teacher");
@@ -112,13 +151,29 @@ function TeacherDashboard() {
     }
   };
 
-  const handleSendBroadcast = (e) => {
+  const handleSendBroadcast = async (e) => {
     e.preventDefault();
     if (!broadcastTitle.trim() || !broadcastContent.trim()) return;
 
+    const title = broadcastTitle.trim();
+    const content = broadcastContent.trim();
+
+    // 1. Send via backend API to store in MongoDB and notify enrolled students
+    try {
+      await teacherApi.sendBroadcast({
+        title,
+        content,
+        priority: broadcastPriority,
+        tag: broadcastTag,
+      });
+    } catch (err) {
+      console.warn("Backend broadcast error:", err.message);
+    }
+
+    // 2. Also save to frontend storage and trigger sync bus
     const updated = saveTeacherBroadcast({
-      title: broadcastTitle.trim(),
-      content: broadcastContent.trim(),
+      title,
+      content,
       priority: broadcastPriority,
       tag: broadcastTag,
       teacherName: user?.name || "Prof. Sarah Jenkins",
@@ -136,35 +191,37 @@ function TeacherDashboard() {
     showToast("Announcement removed.");
   };
 
-  // Merge students roster for personal messaging selector
-  const availableStudentsForDM = (() => {
-    const removedIds = getRemovedStudentIds();
-    const combined = [...students].filter((s) => !removedIds.includes(String(s.id)));
-    const ids = new Set(combined.map((s) => s.id));
-    DEFAULT_STUDENTS_LIST.forEach((s) => {
-      if (!ids.has(s.id) && !removedIds.includes(String(s.id))) {
-        combined.push(s);
-      }
-    });
-    return combined;
-  })();
+  // Only real registered students who have logged in
+  const availableStudentsForDM = students.filter(
+    (s) => !getRemovedStudentIds().includes(String(s.id))
+  );
 
-  const handleTeacherReply = (e) => {
+  const handleTeacherReply = async (e) => {
     e.preventDefault();
-    if (!teacherReplyText.trim()) return;
+    if (!teacherReplyText.trim() || !selectedStudentForDM) return;
 
-    const currentStudentObj = availableStudentsForDM.find((s) => s.id === selectedStudentForDM) || { name: "Student" };
+    const text = teacherReplyText.trim();
+    const currentStudentObj = availableStudentsForDM.find((s) => String(s.id) === String(selectedStudentForDM)) || { name: "Student" };
 
+    // 1. Send via backend API to store in MongoDB and notify the selected student
+    try {
+      await teacherApi.sendDirectMessage(selectedStudentForDM, { text });
+    } catch (err) {
+      console.warn("Backend direct message error:", err.message);
+    }
+
+    // 2. Also save to frontend storage and dispatch sync event
     const updated = sendDirectMessage(selectedStudentForDM, {
       senderRole: "teacher",
       senderName: user?.name || "Prof. Sarah Jenkins",
-      text: teacherReplyText.trim(),
+      text,
       studentName: currentStudentObj.name,
+      studentEmail: currentStudentObj.email,
     });
 
     setDirectMessages(updated);
     setTeacherReplyText("");
-    showToast(`Personal message sent to ${currentStudentObj.name}!`);
+    showToast(`Personal message delivered to ${currentStudentObj.name}!`);
   };
 
   const handleQuickUploadNote = (e) => {

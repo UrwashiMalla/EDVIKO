@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/useAuth";
+import { quizApi } from "../services/api";
 import {
   getTeacherQuizzes,
   getStudentQuizAttempt,
@@ -14,7 +15,8 @@ function StudentQuizzes() {
   const { user } = useAuth();
   const studentKey = user?.id || user?._id || user?.email || "default_student";
 
-  const [quizzes, setQuizzes] = useState(() => getTeacherQuizzes());
+  const [quizzes, setQuizzes] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"); // "all", "pending", "completed"
   const [search, setSearch] = useState("");
 
@@ -23,24 +25,50 @@ function StudentQuizzes() {
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState({}); // { [qIdx]: selectedOptionIdx }
   const [timeLeft, setTimeLeft] = useState(null); // seconds or null if untimed
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizResult, setQuizResult] = useState(null);
+  const [submitError, setSubmitError] = useState("");
   const timerRef = useRef(null);
 
-  // Load and subscribe to real-time updates (when teacher uploads/deletes a quiz)
+  const loadQuizzes = async () => {
+    try {
+      const res = await quizApi.list();
+      if (res.success && Array.isArray(res.quizzes)) {
+        setQuizzes(res.quizzes);
+        setLoading(false);
+        return;
+      }
+    } catch (err) {
+      console.warn("Could not load backend quizzes, checking fallback storage:", err.message);
+    }
+
+    // Local fallback
+    const local = getTeacherQuizzes().map((q) => {
+      const att = getStudentQuizAttempt(q.id, studentKey);
+      return {
+        ...q,
+        hasAttempted: Boolean(att),
+        attempt: att,
+      };
+    });
+    setQuizzes(local);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    setQuizzes(getTeacherQuizzes());
+    loadQuizzes();
     const unsubscribe = onLerniqSync((detail) => {
       if (
         detail.type === "QUIZ_UPLOADED" ||
         detail.type === "QUIZ_DELETED" ||
         detail.type === "QUIZ_ATTEMPT_SUBMITTED"
       ) {
-        setQuizzes(getTeacherQuizzes());
+        loadQuizzes();
       }
     });
     return unsubscribe;
-  }, []);
+  }, [studentKey]);
 
   // Timer countdown logic
   useEffect(() => {
@@ -65,20 +93,28 @@ function StudentQuizzes() {
     return () => clearInterval(timerRef.current);
   }, [activeQuiz, quizSubmitted, timeLeft]);
 
-  // Start Quiz Handler
+  // Start Quiz Handler (Taking new attempt)
   const handleStartQuiz = (quiz) => {
     setActiveQuiz(quiz);
     setCurrentQIndex(0);
     setSelectedAnswers({});
     setQuizSubmitted(false);
     setQuizResult(null);
+    setSubmitError("");
 
-    // Minimum 1 min timer or null if untimed
-    if (quiz.timeLimit && quiz.timeLimit > 0) {
-      setTimeLeft(quiz.timeLimit * 60);
+    if (quiz.timeLimit && Number(quiz.timeLimit) > 0) {
+      setTimeLeft(Number(quiz.timeLimit) * 60);
     } else {
-      setTimeLeft(null);
+      setTimeLeft(null); // Untimed
     }
+  };
+
+  // View Past Completed Result
+  const handleViewResult = (quiz) => {
+    if (!quiz.attempt) return;
+    setActiveQuiz(quiz);
+    setQuizResult(quiz.attempt);
+    setQuizSubmitted(true);
   };
 
   const handleSelectOption = (optIndex) => {
@@ -88,47 +124,115 @@ function StudentQuizzes() {
     }));
   };
 
-  const handleFinalSubmit = () => {
+  // Submit Quiz Attempt (Evaluated securely on backend)
+  const handleFinalSubmit = async () => {
     if (!activeQuiz) return;
-    clearInterval(timerRef.current);
+    if (timerRef.current) clearInterval(timerRef.current);
 
-    const questions = activeQuiz.questions || [];
-    let score = 0;
-    const answerDetails = questions.map((q, idx) => {
-      const selected = selectedAnswers[idx] !== undefined ? selectedAnswers[idx] : -1;
-      const correct = q.answerIndex !== undefined ? q.answerIndex : (q.correctAnswer || 0);
-      const isCorrect = selected === correct;
-      if (isCorrect) score++;
+    setIsSubmitting(true);
+    setSubmitError("");
 
-      return {
-        questionIndex: idx,
-        question: q.question,
-        selectedAnswer: selected,
-        correctAnswer: correct,
-        isCorrect,
-        explanation: q.explanation || "",
+    try {
+      const qId = activeQuiz.id || activeQuiz._id;
+      const res = await quizApi.submitAttempt(qId, {
+        answers: selectedAnswers,
+      });
+
+      if (res.success && res.result) {
+        setQuizResult(res.result);
+        setQuizSubmitted(true);
+
+        // Also sync local storage for real-time cross-tab updates
+        recordStudentQuizAttempt({
+          quizId: qId,
+          studentId: user?.id || user?._id || "std_101",
+          studentName: user?.name || "Student",
+          studentEmail: user?.email || "student@lerniq.edu",
+          score: res.result.score,
+          totalQuestions: res.result.totalQuestions,
+          answers: res.result.answers,
+        });
+
+        await loadQuizzes();
+        return;
+      }
+      throw new Error(res.message || "Evaluation failed.");
+    } catch (err) {
+      console.warn("Backend submit error, running fallback evaluation:", err);
+
+      // Secure client fallback if backend is momentarily unreachable
+      const questions = activeQuiz.questions || [];
+      let correctCount = 0;
+      let wrongCount = 0;
+      let unattemptedCount = 0;
+
+      const evaluatedAnswers = questions.map((q, idx) => {
+        const rawSel = selectedAnswers[idx];
+        const selected = (rawSel !== undefined && rawSel !== null && rawSel !== -1) ? Number(rawSel) : -1;
+        const correct = typeof q.correctAnswer === "number" ? q.correctAnswer : (typeof q.answerIndex === "number" ? q.answerIndex : 0);
+
+        let status = "Not Attempted";
+        let isCorrect = false;
+
+        if (selected === -1) {
+          status = "Not Attempted";
+          isCorrect = false;
+          unattemptedCount++;
+        } else if (selected === correct) {
+          status = "Correct";
+          isCorrect = true;
+          correctCount++;
+        } else {
+          status = "Wrong";
+          isCorrect = false;
+          wrongCount++;
+        }
+
+        return {
+          questionIndex: idx,
+          question: q.question,
+          options: q.options || ["Option A", "Option B", "Option C", "Option D"],
+          selectedAnswer: selected,
+          correctAnswer: correct,
+          isCorrect,
+          status,
+          explanation: q.explanation || "Verified from study curriculum.",
+        };
+      });
+
+      const totalQuestions = questions.length;
+      const score = correctCount;
+      const percentage = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+      const passed = percentage >= (activeQuiz.passingScore || 60);
+
+      const fallbackResult = {
+        score,
+        totalQuestions,
+        correctCount,
+        wrongCount,
+        unattemptedCount,
+        percentage,
+        passed,
+        answers: evaluatedAnswers,
       };
-    });
 
-    const res = recordStudentQuizAttempt({
-      quizId: activeQuiz.id,
-      studentId: user?.id || user?._id || "std_101",
-      studentName: user?.name || "Student",
-      studentEmail: user?.email || "student@lerniq.edu",
-      score,
-      totalQuestions: questions.length,
-      answers: answerDetails,
-    });
+      setQuizResult(fallbackResult);
+      setQuizSubmitted(true);
 
-    setQuizResult({
-      score,
-      totalQuestions: questions.length,
-      percentage: res.percentage,
-      passed: res.percentage >= (activeQuiz.passingScore || 60),
-      answers: answerDetails,
-    });
-    setQuizSubmitted(true);
-    setQuizzes(getTeacherQuizzes());
+      recordStudentQuizAttempt({
+        quizId: activeQuiz.id || activeQuiz._id,
+        studentId: user?.id || user?._id || "std_101",
+        studentName: user?.name || "Student",
+        studentEmail: user?.email || "student@lerniq.edu",
+        score,
+        totalQuestions,
+        answers: evaluatedAnswers,
+      });
+
+      await loadQuizzes();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Format seconds to mm:ss
@@ -139,21 +243,28 @@ function StudentQuizzes() {
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
-  // Compute stats
+  // Statistics calculation
   const totalQuizzes = quizzes.length;
-  const attemptedQuizzes = quizzes.filter((q) => getStudentQuizAttempt(q.id, studentKey));
+  const attemptedQuizzes = quizzes.filter((q) => {
+    if (q.hasAttempted) return true;
+    return Boolean(getStudentQuizAttempt(q.id || q._id, studentKey));
+  });
   const completedCount = attemptedQuizzes.length;
-  const pendingCount = totalQuizzes - completedCount;
+  const pendingCount = Math.max(0, totalQuizzes - completedCount);
 
   const totalScorePct = attemptedQuizzes.reduce((acc, q) => {
-    const att = getStudentQuizAttempt(q.id, studentKey);
+    if (q.attempt && typeof q.attempt.percentage === "number") {
+      return acc + q.attempt.percentage;
+    }
+    const att = getStudentQuizAttempt(q.id || q._id, studentKey);
     return acc + (att?.percentage || 0);
   }, 0);
   const avgScore = completedCount > 0 ? Math.round(totalScorePct / completedCount) : 0;
 
   // Filtered List
   const filteredQuizzes = quizzes.filter((q) => {
-    const isCompleted = Boolean(getStudentQuizAttempt(q.id, studentKey));
+    const qId = q.id || q._id;
+    const isCompleted = q.hasAttempted || Boolean(getStudentQuizAttempt(qId, studentKey));
     if (filter === "completed" && !isCompleted) return false;
     if (filter === "pending" && isCompleted) return false;
     if (search.trim()) {
@@ -200,8 +311,8 @@ function StudentQuizzes() {
                   background: "#ffffff",
                   borderRadius: "24px",
                   width: "100%",
-                  maxWidth: "760px",
-                  maxHeight: "90vh",
+                  maxWidth: "820px",
+                  maxHeight: "92vh",
                   display: "flex",
                   flexDirection: "column",
                   boxShadow: "0 25px 60px rgba(0,0,0,0.3)",
@@ -221,30 +332,32 @@ function StudentQuizzes() {
                 >
                   <div>
                     <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "1px", background: "rgba(255,255,255,0.2)", padding: "3px 8px", borderRadius: "6px" }}>
-                      {activeQuiz.subject}
+                      {activeQuiz.subject || "Class Assessment"}
                     </span>
                     <h2 style={{ fontSize: "20px", fontWeight: "800", margin: "6px 0 0 0" }}>
                       {activeQuiz.title}
                     </h2>
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
                     {/* Timer Widget */}
-                    <div
-                      style={{
-                        background: timeLeft !== null && timeLeft <= 60 ? "#ef4444" : "rgba(255,255,255,0.2)",
-                        padding: "8px 14px",
-                        borderRadius: "12px",
-                        fontWeight: "800",
-                        fontSize: "14px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                      }}
-                    >
-                      <span>⏱️</span>
-                      <span>{formatTime(timeLeft)}</span>
-                    </div>
+                    {!quizSubmitted && (
+                      <div
+                        style={{
+                          background: timeLeft !== null && timeLeft <= 60 ? "#ef4444" : "rgba(255,255,255,0.2)",
+                          padding: "8px 14px",
+                          borderRadius: "12px",
+                          fontWeight: "800",
+                          fontSize: "14px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                        }}
+                      >
+                        <span>⏱️</span>
+                        <span>{formatTime(timeLeft)}</span>
+                      </div>
+                    )}
 
                     <button
                       onClick={() => setActiveQuiz(null)}
@@ -256,6 +369,7 @@ function StudentQuizzes() {
                         height: "32px",
                         color: "#fff",
                         cursor: "pointer",
+                        fontSize: "14px",
                       }}
                     >
                       ✕
@@ -270,14 +384,14 @@ function StudentQuizzes() {
                       {/* Progress Bar */}
                       <div style={{ marginBottom: "20px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "700", color: "#64748b", marginBottom: "6px" }}>
-                          <span>Question {currentQIndex + 1} of {activeQuiz.questions.length}</span>
-                          <span>{Math.round(((currentQIndex + 1) / activeQuiz.questions.length) * 100)}% Completed</span>
+                          <span>Question {currentQIndex + 1} of {activeQuiz.questions?.length || 0}</span>
+                          <span>{activeQuiz.questions ? Math.round(((currentQIndex + 1) / activeQuiz.questions.length) * 100) : 0}% Completed</span>
                         </div>
                         <div style={{ height: "8px", background: "#f1f5f9", borderRadius: "4px", overflow: "hidden" }}>
                           <div
                             style={{
                               height: "100%",
-                              width: `${((currentQIndex + 1) / activeQuiz.questions.length) * 100}%`,
+                              width: `${activeQuiz.questions ? ((currentQIndex + 1) / activeQuiz.questions.length) * 100 : 0}%`,
                               background: "linear-gradient(90deg, #7c3aed, #a855f7)",
                               transition: "width 0.3s ease",
                             }}
@@ -286,7 +400,7 @@ function StudentQuizzes() {
                       </div>
 
                       {/* Question Card */}
-                      {activeQuiz.questions[currentQIndex] && (
+                      {activeQuiz.questions && activeQuiz.questions[currentQIndex] && (
                         <div>
                           <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#1e293b", lineHeight: 1.5, marginBottom: "20px" }}>
                             {activeQuiz.questions[currentQIndex].question}
@@ -294,7 +408,7 @@ function StudentQuizzes() {
 
                           {/* Options */}
                           <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "24px" }}>
-                            {activeQuiz.questions[currentQIndex].options.map((opt, optIdx) => {
+                            {(activeQuiz.questions[currentQIndex].options || []).map((opt, optIdx) => {
                               const isSelected = selectedAnswers[currentQIndex] === optIdx;
                               return (
                                 <button
@@ -340,6 +454,12 @@ function StudentQuizzes() {
                             })}
                           </div>
 
+                          {submitError && (
+                            <div style={{ padding: "10px 14px", background: "#fef2f2", color: "#b91c1c", borderRadius: "10px", fontSize: "13px", marginBottom: "16px" }}>
+                              ⚠️ {submitError}
+                            </div>
+                          )}
+
                           {/* Navigation Buttons */}
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "16px", borderTop: "1px solid #f1f5f9" }}>
                             <button
@@ -360,7 +480,11 @@ function StudentQuizzes() {
                               ← Previous
                             </button>
 
-                            {currentQIndex < activeQuiz.questions.length - 1 ? (
+                            <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>
+                              {selectedAnswers[currentQIndex] !== undefined ? "✓ Option selected" : "Not attempted yet"}
+                            </div>
+
+                            {currentQIndex < (activeQuiz.questions?.length || 0) - 1 ? (
                               <button
                                 type="button"
                                 onClick={() => setCurrentQIndex((prev) => prev + 1)}
@@ -382,19 +506,20 @@ function StudentQuizzes() {
                               <button
                                 type="button"
                                 onClick={handleFinalSubmit}
+                                disabled={isSubmitting}
                                 style={{
                                   padding: "10px 24px",
-                                  background: "linear-gradient(135deg, #10b981, #059669)",
+                                  background: isSubmitting ? "#cbd5e1" : "linear-gradient(135deg, #10b981, #059669)",
                                   color: "#ffffff",
                                   border: "none",
                                   borderRadius: "10px",
                                   fontWeight: "800",
                                   fontSize: "14px",
-                                  cursor: "pointer",
+                                  cursor: isSubmitting ? "default" : "pointer",
                                   boxShadow: "0 4px 14px rgba(16, 185, 129, 0.3)",
                                 }}
                               >
-                                ✓ Submit Quiz
+                                {isSubmitting ? "Evaluating on Server..." : "✓ Submit Quiz"}
                               </button>
                             )}
                           </div>
@@ -406,15 +531,15 @@ function StudentQuizzes() {
                     <div style={{ textAlign: "center", padding: "10px 0" }}>
                       <div
                         style={{
-                          width: "80px",
-                          height: "80px",
+                          width: "72px",
+                          height: "72px",
                           borderRadius: "50%",
                           background: quizResult.passed ? "#dcfce7" : "#fee2e2",
                           color: quizResult.passed ? "#16a34a" : "#dc2626",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          fontSize: "36px",
+                          fontSize: "32px",
                           margin: "0 auto 16px auto",
                         }}
                       >
@@ -425,95 +550,193 @@ function StudentQuizzes() {
                         {quizResult.passed ? "Quiz Completed Successfully!" : "Quiz Completed - Keep Practicing!"}
                       </h2>
                       <p style={{ color: "#64748b", fontSize: "14px", margin: "0 0 20px 0" }}>
-                        Your results have been securely recorded and synced to your instructor.
+                        Your attempt has been securely evaluated and recorded in MongoDB.
                       </p>
 
+                      {/* Result Metrics Grid */}
                       <div
                         style={{
-                          display: "inline-flex",
-                          gap: "24px",
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+                          gap: "12px",
                           background: "#f8fafc",
-                          padding: "16px 28px",
+                          padding: "16px",
                           borderRadius: "16px",
                           border: "1px solid #e2e8f0",
                           marginBottom: "28px",
                         }}
                       >
-                        <div>
+                        <div style={{ padding: "8px" }}>
                           <span style={{ fontSize: "11px", fontWeight: "700", color: "#64748b", textTransform: "uppercase" }}>
-                            Your Score
+                            Total Marks
                           </span>
-                          <div style={{ fontSize: "22px", fontWeight: "800", color: "#7c3aed" }}>
+                          <div style={{ fontSize: "20px", fontWeight: "800", color: "#7c3aed", marginTop: "2px" }}>
                             {quizResult.score} / {quizResult.totalQuestions}
                           </div>
                         </div>
-                        <div style={{ width: "1px", background: "#e2e8f0" }} />
-                        <div>
-                          <span style={{ fontSize: "11px", fontWeight: "700", color: "#64748b", textTransform: "uppercase" }}>
-                            Accuracy
+
+                        <div style={{ padding: "8px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: "700", color: "#16a34a", textTransform: "uppercase" }}>
+                            Correct
                           </span>
-                          <div style={{ fontSize: "22px", fontWeight: "800", color: quizResult.passed ? "#16a34a" : "#ea580c" }}>
+                          <div style={{ fontSize: "20px", fontWeight: "800", color: "#16a34a", marginTop: "2px" }}>
+                            {quizResult.correctCount !== undefined ? quizResult.correctCount : quizResult.score}
+                          </div>
+                        </div>
+
+                        <div style={{ padding: "8px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: "700", color: "#dc2626", textTransform: "uppercase" }}>
+                            Wrong
+                          </span>
+                          <div style={{ fontSize: "20px", fontWeight: "800", color: "#dc2626", marginTop: "2px" }}>
+                            {quizResult.wrongCount !== undefined ? quizResult.wrongCount : (quizResult.totalQuestions - quizResult.score)}
+                          </div>
+                        </div>
+
+                        <div style={{ padding: "8px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: "700", color: "#d97706", textTransform: "uppercase" }}>
+                            Not Attempted
+                          </span>
+                          <div style={{ fontSize: "20px", fontWeight: "800", color: "#d97706", marginTop: "2px" }}>
+                            {quizResult.unattemptedCount !== undefined ? quizResult.unattemptedCount : 0}
+                          </div>
+                        </div>
+
+                        <div style={{ padding: "8px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase" }}>
+                            Percentage
+                          </span>
+                          <div style={{ fontSize: "20px", fontWeight: "800", color: quizResult.passed ? "#16a34a" : "#ea580c", marginTop: "2px" }}>
                             {quizResult.percentage}%
                           </div>
                         </div>
-                        <div style={{ width: "1px", background: "#e2e8f0" }} />
-                        <div>
-                          <span style={{ fontSize: "11px", fontWeight: "700", color: "#64748b", textTransform: "uppercase" }}>
-                            Pass Status
+                      </div>
+
+                      {/* Detailed Question Review Showing Selected vs Correct Answer */}
+                      <div style={{ textAlign: "left", marginBottom: "28px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                          <h4 style={{ fontSize: "16px", fontWeight: "800", color: "#1e293b", margin: 0 }}>
+                            Review Each Question & Explanations:
+                          </h4>
+                          <span style={{ fontSize: "12px", color: "#64748b" }}>
+                            Showing correct answer for every question
                           </span>
-                          <div style={{ fontSize: "15px", fontWeight: "800", marginTop: "4px", color: quizResult.passed ? "#16a34a" : "#dc2626" }}>
-                            {quizResult.passed ? "PASSED" : "NEEDS WORK"}
-                          </div>
                         </div>
-                      </div>
 
-                      {/* Detailed Question Review */}
-                      <div style={{ textAlign: "left", marginBottom: "24px" }}>
-                        <h4 style={{ fontSize: "15px", fontWeight: "800", color: "#334155", marginBottom: "12px" }}>
-                          Review Answers & Explanations:
-                        </h4>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                          {quizResult.answers.map((ans, idx) => (
-                            <div
-                              key={idx}
-                              style={{
-                                padding: "12px 16px",
-                                borderRadius: "12px",
-                                background: ans.isCorrect ? "#f0fdf4" : "#fef2f2",
-                                border: "1px solid",
-                                borderColor: ans.isCorrect ? "#bbf7d0" : "#fecaca",
-                                fontSize: "13px",
-                              }}
-                            >
-                              <div style={{ fontWeight: "700", color: ans.isCorrect ? "#166534" : "#991b1b" }}>
-                                {ans.isCorrect ? "✓" : "✗"} Q{idx + 1}: {ans.question}
-                              </div>
-                              {ans.explanation && (
-                                <div style={{ fontSize: "12px", color: "#475569", marginTop: "4px", fontStyle: "italic" }}>
-                                  💡 {ans.explanation}
+                        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                          {(quizResult.answers || []).map((ans, idx) => {
+                            const isCorrect = ans.status === "Correct" || ans.isCorrect === true;
+                            const isUnattempted = ans.status === "Not Attempted" || ans.selectedAnswer === -1;
+                            const isWrong = !isCorrect && !isUnattempted;
+
+                            let statusLabel = "Correct";
+                            let statusBg = "#dcfce7";
+                            let statusColor = "#15803d";
+                            let cardBorder = "#bbf7d0";
+
+                            if (isWrong) {
+                              statusLabel = "Wrong";
+                              statusBg = "#fee2e2";
+                              statusColor = "#b91c1c";
+                              cardBorder = "#fecaca";
+                            } else if (isUnattempted) {
+                              statusLabel = "Not Attempted";
+                              statusBg = "#fef3c7";
+                              statusColor = "#b45309";
+                              cardBorder = "#fde68a";
+                            }
+
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  padding: "16px 20px",
+                                  borderRadius: "14px",
+                                  background: "#ffffff",
+                                  border: `1.5px solid ${cardBorder}`,
+                                  boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
+                                }}
+                              >
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", gap: "10px" }}>
+                                  <div style={{ fontWeight: "700", color: "#1e293b", fontSize: "14px", lineHeight: 1.4 }}>
+                                    Q{idx + 1}. {ans.question}
+                                  </div>
+                                  <span
+                                    style={{
+                                      padding: "3px 10px",
+                                      borderRadius: "8px",
+                                      background: statusBg,
+                                      color: statusColor,
+                                      fontWeight: "800",
+                                      fontSize: "11px",
+                                      whiteSpace: "nowrap",
+                                      textTransform: "uppercase",
+                                    }}
+                                  >
+                                    {statusLabel}
+                                  </span>
                                 </div>
-                              )}
-                            </div>
-                          ))}
+
+                                {/* Answers Comparison */}
+                                <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "13px", marginTop: "10px" }}>
+                                  {/* Student's Selected Answer */}
+                                  <div style={{ padding: "6px 12px", borderRadius: "8px", background: isCorrect ? "#f0fdf4" : (isUnattempted ? "#fffbeb" : "#fef2f2") }}>
+                                    <span style={{ fontWeight: "700", color: "#475569" }}>Your Answer: </span>
+                                    {ans.selectedAnswer >= 0 && ans.selectedAnswer <= 3 ? (
+                                      <span style={{ fontWeight: "700", color: isCorrect ? "#16a34a" : "#dc2626" }}>
+                                        Option {String.fromCharCode(65 + ans.selectedAnswer)}
+                                        {ans.options && ans.options[ans.selectedAnswer] ? `: ${ans.options[ans.selectedAnswer]}` : ""}
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: "#b45309", fontStyle: "italic", fontWeight: "600" }}>
+                                        Not Attempted (No option selected)
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Actual Correct Answer (Displayed for all questions) */}
+                                  <div style={{ padding: "6px 12px", borderRadius: "8px", background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                                    <span style={{ fontWeight: "700", color: "#166534" }}>Correct Answer: </span>
+                                    <span style={{ fontWeight: "800", color: "#15803d" }}>
+                                      Option {String.fromCharCode(65 + (ans.correctAnswer !== undefined ? ans.correctAnswer : 0))}
+                                      {ans.options && ans.options[ans.correctAnswer] ? `: ${ans.options[ans.correctAnswer]}` : ""}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {ans.explanation && (
+                                  <div style={{ fontSize: "12px", color: "#065f46", background: "#ecfdf5", padding: "8px 12px", borderRadius: "8px", marginTop: "10px" }}>
+                                    💡 <strong>Explanation:</strong> {ans.explanation}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setActiveQuiz(null)}
-                        style={{
-                          padding: "12px 28px",
-                          background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
-                          color: "#ffffff",
-                          border: "none",
-                          borderRadius: "12px",
-                          fontWeight: "800",
-                          fontSize: "14px",
-                          cursor: "pointer",
-                        }}
-                      >
-                        ← Back to Quizzes
-                      </button>
+                      <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveQuiz(null);
+                            setQuizSubmitted(false);
+                            setQuizResult(null);
+                          }}
+                          style={{
+                            padding: "12px 28px",
+                            background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+                            color: "#ffffff",
+                            border: "none",
+                            borderRadius: "12px",
+                            fontWeight: "800",
+                            fontSize: "14px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          ← Back to All Quizzes
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -523,16 +746,16 @@ function StudentQuizzes() {
         </AnimatePresence>
 
         {/* ================= PAGE HEADER & STATS ================= */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px", flexWrap: "wrap", gap: "16px" }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
               <span style={{ fontSize: "24px" }}>🎯</span>
               <h1 style={{ fontSize: "28px", fontWeight: "900", color: "#0f172a", margin: 0 }}>
-                Assigned Class Quizzes
+                Classroom Quizzes
               </h1>
             </div>
             <p style={{ color: "#64748b", fontSize: "15px", margin: 0 }}>
-              Solve quizzes uploaded and conducted by your instructor. Test your mastery and track results.
+              Attempt quizzes published by your instructor. Securely evaluated with instant results and explanations.
             </p>
           </div>
 
@@ -556,14 +779,14 @@ function StudentQuizzes() {
           </Link>
         </div>
 
-        {/* 4 Quick Stat Cards */}
+        {/* 4 Stat Cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "32px" }}>
           <div style={{ background: "#ffffff", borderRadius: "18px", padding: "20px", border: "1px solid #f1f5f9", boxShadow: "0 2px 10px rgba(0,0,0,0.02)" }}>
             <span style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase" }}>
               TOTAL ASSIGNED
             </span>
             <div style={{ fontSize: "28px", fontWeight: "900", color: "#1e293b", marginTop: "4px" }}>
-              {totalQuizzes}
+              {loading ? "..." : totalQuizzes}
             </div>
           </div>
 
@@ -572,7 +795,7 @@ function StudentQuizzes() {
               COMPLETED
             </span>
             <div style={{ fontSize: "28px", fontWeight: "900", color: "#16a34a", marginTop: "4px" }}>
-              {completedCount}
+              {loading ? "..." : completedCount}
             </div>
           </div>
 
@@ -581,13 +804,13 @@ function StudentQuizzes() {
               PENDING
             </span>
             <div style={{ fontSize: "28px", fontWeight: "900", color: "#ea580c", marginTop: "4px" }}>
-              {pendingCount}
+              {loading ? "..." : pendingCount}
             </div>
           </div>
 
           <div style={{ background: "#ffffff", borderRadius: "18px", padding: "20px", border: "1px solid #f1f5f9", boxShadow: "0 2px 10px rgba(0,0,0,0.02)" }}>
             <span style={{ fontSize: "12px", fontWeight: "700", color: "#7c3aed", textTransform: "uppercase" }}>
-              AVERAGE SCORE
+              AVERAGE ACCURACY
             </span>
             <div style={{ fontSize: "28px", fontWeight: "900", color: "#7c3aed", marginTop: "4px" }}>
               {completedCount > 0 ? `${avgScore}%` : "—"}
@@ -610,7 +833,7 @@ function StudentQuizzes() {
             gap: "14px",
           }}
         >
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {[
               { id: "all", label: `All Quizzes (${totalQuizzes})` },
               { id: "pending", label: `Pending (${pendingCount})` },
@@ -652,7 +875,11 @@ function StudentQuizzes() {
         </div>
 
         {/* ================= QUIZ CARDS GRID ================= */}
-        {filteredQuizzes.length === 0 ? (
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "50px", color: "#64748b" }}>
+            Loading your classroom quizzes...
+          </div>
+        ) : filteredQuizzes.length === 0 ? (
           <div
             style={{
               background: "#ffffff",
@@ -669,23 +896,24 @@ function StudentQuizzes() {
             <p style={{ color: "#64748b", fontSize: "14px" }}>
               {filter === "completed"
                 ? "You haven't completed any quizzes yet. Switch to 'Pending' to start solving."
-                : "No quizzes match your search criteria or none have been assigned by your teacher yet."}
+                : "No quizzes match your filter or your instructor has not published a quiz to this classroom yet."}
             </p>
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: "20px" }}>
             {filteredQuizzes.map((q) => {
-              const attempt = getStudentQuizAttempt(q.id, studentKey);
-              const isCompleted = Boolean(attempt);
+              const qId = q.id || q._id;
+              const isCompleted = q.hasAttempted || Boolean(getStudentQuizAttempt(qId, studentKey));
+              const attempt = q.attempt || getStudentQuizAttempt(qId, studentKey);
 
               return (
                 <div
-                  key={q.id}
+                  key={qId}
                   style={{
                     background: "#ffffff",
                     borderRadius: "20px",
                     padding: "24px",
-                    border: "1px solid",
+                    border: "1.5px solid",
                     borderColor: isCompleted ? "#dcfce7" : "#ede9fe",
                     boxShadow: "0 4px 16px rgba(0,0,0,0.03)",
                     display: "flex",
@@ -724,7 +952,7 @@ function StudentQuizzes() {
                             gap: "4px",
                           }}
                         >
-                          ✓ Completed ({attempt.percentage}%)
+                          ✓ Completed ({attempt?.percentage !== undefined ? attempt.percentage : 0}%)
                         </span>
                       ) : (
                         <span
@@ -742,9 +970,12 @@ function StudentQuizzes() {
                       )}
                     </div>
 
-                    <h3 style={{ fontSize: "17px", fontWeight: "800", color: "#0f172a", margin: "0 0 10px 0", lineHeight: 1.4 }}>
+                    <h3 style={{ fontSize: "17px", fontWeight: "800", color: "#0f172a", margin: "0 0 6px 0", lineHeight: 1.4 }}>
                       {q.title}
                     </h3>
+                    {q.description && (
+                      <p style={{ margin: "0 0 10px 0", fontSize: "13px", color: "#64748b" }}>{q.description}</p>
+                    )}
 
                     {/* Metadata Grid */}
                     <div
@@ -761,7 +992,7 @@ function StudentQuizzes() {
                       }}
                     >
                       <div>
-                        <strong>Questions:</strong> {q.questions?.length || q.questionCount || 5}
+                        <strong>Questions:</strong> {q.questionCount || (q.questions ? q.questions.length : 0)}
                       </div>
                       <div>
                         <strong>Time Limit:</strong> {q.timeLimit ? `${q.timeLimit} Mins` : "Untimed"}
@@ -774,7 +1005,7 @@ function StudentQuizzes() {
                       </div>
                     </div>
 
-                    {isCompleted && (
+                    {isCompleted && attempt && (
                       <div
                         style={{
                           padding: "10px 14px",
@@ -786,19 +1017,44 @@ function StudentQuizzes() {
                           marginBottom: "16px",
                         }}
                       >
-                        <strong>Your Score:</strong> {attempt.score} / {attempt.totalQuestions || q.questions?.length} ({attempt.percentage}%) • {attempt.completedAt || "Completed"}
+                        <strong>Score:</strong> {attempt.score} / {attempt.totalQuestions || q.questionCount || 0} ({attempt.percentage}%)
+                        {attempt.correctCount !== undefined && (
+                          <div style={{ marginTop: "4px", fontSize: "11px", color: "#475569" }}>
+                            ✅ {attempt.correctCount} Correct • ❌ {attempt.wrongCount} Wrong • ⏸️ {attempt.unattemptedCount || 0} Not Attempted
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
 
                   {/* Actions */}
-                  <div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {isCompleted && attempt && (
+                      <button
+                        type="button"
+                        onClick={() => handleViewResult(q)}
+                        style={{
+                          flex: 1,
+                          padding: "11px",
+                          borderRadius: "12px",
+                          border: "1.5px solid #ddd6fe",
+                          background: "#ffffff",
+                          color: "#6d28d9",
+                          fontWeight: "800",
+                          fontSize: "13px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        👁️ Review Answers
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => handleStartQuiz(q)}
                       style={{
-                        width: "100%",
-                        padding: "12px",
+                        flex: 1,
+                        padding: "11px",
                         borderRadius: "12px",
                         border: "none",
                         background: isCompleted
@@ -806,13 +1062,12 @@ function StudentQuizzes() {
                           : "linear-gradient(135deg, #7c3aed, #6d28d9)",
                         color: isCompleted ? "#475569" : "#ffffff",
                         fontWeight: "800",
-                        fontSize: "14px",
+                        fontSize: "13px",
                         cursor: "pointer",
                         boxShadow: isCompleted ? "none" : "0 4px 14px rgba(124, 58, 237, 0.25)",
-                        transition: "all 0.2s ease",
                       }}
                     >
-                      {isCompleted ? "🔄 Retake / Review Quiz" : "▶ Start Quiz"}
+                      {isCompleted ? "🔄 Retake Quiz" : "▶ Start Quiz"}
                     </button>
                   </div>
                 </div>

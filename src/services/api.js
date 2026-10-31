@@ -27,7 +27,10 @@ export const apiRequest = async (endpoint, options = {}) => {
   try {
     data = await response.json();
   } catch {
-    data = { success: false, message: "Invalid response from server." };
+    data = {
+      success: false,
+      message: `Server returned HTTP ${response.status} (${response.statusText || "Non-JSON response"})`,
+    };
   }
 
   if (!response.ok) {
@@ -71,14 +74,29 @@ export const aiApi = {
 };
 
 export const quizApi = {
+  list: () => apiRequest("/api/quizzes"),
+  getById: (id) => apiRequest(`/api/quizzes/${id}`),
+  generatePreview: (body) => apiRequest("/api/quizzes/generate-preview", { method: "POST", body: JSON.stringify(body) }),
+  publish: (body) => apiRequest("/api/quizzes", { method: "POST", body: JSON.stringify(body) }),
+  delete: (id) => apiRequest(`/api/quizzes/${id}`, { method: "DELETE" }),
+  getSubmissions: (id) => apiRequest(`/api/quizzes/${id}/submissions`),
   getByDocument: (docId, lang = "") => apiRequest(`/api/quizzes/document/${docId}${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),
   submitAttempt: (quizId, body) => apiRequest(`/api/quizzes/${quizId}/attempt`, { method: "POST", body: JSON.stringify(body) }),
   getAttempts: (quizId) => apiRequest(`/api/quizzes/${quizId}/attempts`),
 };
 
+export const notificationApi = {
+  getMyNotifications: () => apiRequest("/api/notifications"),
+  markAllRead: () => apiRequest("/api/notifications/mark-all-read", { method: "PUT" }),
+  markOneRead: (id) => apiRequest(`/api/notifications/${id}/read`, { method: "PUT" }),
+};
+
 export const studentApi = {
   getDashboard: () => apiRequest("/api/students/me/dashboard"),
   updateProfile: (body) => apiRequest("/api/students/me/profile", { method: "PUT", body: JSON.stringify(body) }),
+  getBroadcasts: () => apiRequest("/api/students/messages/broadcasts"),
+  getDirectMessages: () => apiRequest("/api/students/messages/direct"),
+  sendDirectMessage: (body) => apiRequest("/api/students/messages/direct", { method: "POST", body: JSON.stringify(body) }),
 };
 
 export const teacherApi = {
@@ -89,4 +107,8 @@ export const teacherApi = {
   getDocuments: () => apiRequest("/api/teachers/documents"),
   getQuizResults: () => apiRequest("/api/teachers/quiz-results"),
   removeStudent: (studentId) => apiRequest(`/api/teachers/students/${studentId}`, { method: "DELETE" }),
+  sendBroadcast: (body) => apiRequest("/api/teachers/broadcast", { method: "POST", body: JSON.stringify(body) }),
+  getBroadcasts: () => apiRequest("/api/teachers/broadcasts"),
+  sendDirectMessage: (studentId, body) => apiRequest(`/api/teachers/students/${studentId}/message`, { method: "POST", body: JSON.stringify(body) }),
+  getDirectMessages: (studentId) => apiRequest(`/api/teachers/students/${studentId}/messages`),
 };
