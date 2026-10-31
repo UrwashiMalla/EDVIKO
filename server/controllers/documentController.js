@@ -32,11 +32,14 @@ const createDocument = async (req, res, next) => {
 
     const stats = getStats(validation.cleanedText);
     const docTitle = title && title.trim() ? title.trim() : (originalFileName || "Untitled Study Document");
+    const isTeacher = req.user.role === "teacher";
 
     const document = await Document.create({
       studentId: req.user._id,
+      teacherId: isTeacher ? req.user._id : null,
+      isTeacherMaterial: isTeacher,
       title: docTitle,
-      originalFileName: originalFileName || "document.pdf",
+      originalFileName: originalFileName || (isTeacher ? "faculty_handout.pdf" : "document.pdf"),
       fileType: (fileType || "pdf").toLowerCase(),
       fileSize: fileSize || 0,
       extractedText: validation.cleanedText,
@@ -56,6 +59,7 @@ const createDocument = async (req, res, next) => {
         wordCount: document.wordCount,
         characterCount: document.characterCount,
         uploadDate: document.uploadDate,
+        isTeacherMaterial: document.isTeacherMaterial,
       },
     });
   } catch (err) {
@@ -64,11 +68,42 @@ const createDocument = async (req, res, next) => {
 };
 
 /**
- * Get Student's Documents with learning status
+ * Get Student's Documents with learning status (includes shared teacher documents)
  */
 const getMyDocuments = async (req, res, next) => {
   try {
-    const documents = await Document.find({ studentId: req.user._id })
+    let filter = { studentId: req.user._id };
+
+    if (req.user.role === "student") {
+      const profile = await StudentProfile.findOne({ userId: req.user._id });
+      if (profile && profile.teacherId) {
+        filter = {
+          $or: [
+            { studentId: req.user._id },
+            { teacherId: profile.teacherId },
+            { isTeacherMaterial: true },
+          ],
+        };
+      } else {
+        filter = {
+          $or: [
+            { studentId: req.user._id },
+            { isTeacherMaterial: true },
+          ],
+        };
+      }
+    } else if (req.user.role === "teacher") {
+      filter = {
+        $or: [
+          { studentId: req.user._id },
+          { teacherId: req.user._id },
+          { isTeacherMaterial: true },
+        ],
+      };
+    }
+
+    const documents = await Document.find(filter)
+      .populate("teacherId", "name email")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -86,6 +121,7 @@ const getMyDocuments = async (req, res, next) => {
       const latestAttempt = attempts.find(
         (att) => att.documentId.toString() === doc._id.toString()
       );
+      const isFromTeacher = Boolean(doc.isTeacherMaterial || (doc.teacherId && doc.teacherId.toString() !== req.user._id.toString()));
 
       return {
         id: doc._id,
@@ -95,6 +131,8 @@ const getMyDocuments = async (req, res, next) => {
         fileSize: doc.fileSize,
         wordCount: doc.wordCount,
         uploadDate: doc.uploadDate,
+        isTeacherMaterial: isFromTeacher,
+        teacherName: doc.teacherId?.name || (isFromTeacher ? "Faculty Instructor" : null),
         hasSummary: Boolean(ai?.summary),
         hasNotes: Boolean(ai?.importantNotes || ai?.quickNotes),
         hasQuestions: Boolean(ai?.questions && ai.questions.length > 0),
@@ -133,26 +171,35 @@ const getDocumentById = async (req, res, next) => {
       });
     }
 
-    // Role-based authorization
+    // Role-based authorization: allow document owner, shared teacher material, or assigned teacher
     if (req.user.role === "student") {
-      if (!document.studentId.equals(req.user._id)) {
-        return res.status(403).json({
-          success: false,
-          message: "Access denied. You cannot view other students' documents.",
-        });
+      const isOwner = document.studentId.equals(req.user._id);
+      const isShared = document.isTeacherMaterial;
+      if (!isOwner && !isShared) {
+        const profile = await StudentProfile.findOne({ userId: req.user._id });
+        const isFromMyTeacher = profile && profile.teacherId && document.teacherId && profile.teacherId.equals(document.teacherId);
+        if (!isFromMyTeacher) {
+          return res.status(403).json({
+            success: false,
+            message: "Access denied. You cannot view other students' documents.",
+          });
+        }
       }
     } else if (req.user.role === "teacher") {
-      // Verify student belongs to this teacher
-      const profile = await StudentProfile.findOne({
-        userId: document.studentId,
-        teacherId: req.user._id,
-      });
-
-      if (!profile) {
-        return res.status(403).json({
-          success: false,
-          message: "Access denied. This student is not assigned to your classes.",
+      const isTeacherOwner = (document.teacherId && document.teacherId.equals(req.user._id)) || document.isTeacherMaterial || document.studentId.equals(req.user._id);
+      if (!isTeacherOwner) {
+        // Verify student belongs to this teacher
+        const profile = await StudentProfile.findOne({
+          userId: document.studentId,
+          teacherId: req.user._id,
         });
+
+        if (!profile) {
+          return res.status(403).json({
+            success: false,
+            message: "Access denied. This student is not assigned to your classes.",
+          });
+        }
       }
     }
 

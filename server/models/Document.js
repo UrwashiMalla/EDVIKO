@@ -8,6 +8,17 @@ const documentSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    teacherId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    isTeacherMaterial: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     title: {
       type: String,
       required: true,

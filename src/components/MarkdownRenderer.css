@@ -1,0 +1,354 @@
+/* ========================================================
+   EDVIKO PREMIUM MARKDOWN & TYPOGRAPHY STYLES
+   Designed for ChatGPT-level academic readability
+======================================================== */
+
+.edviko-markdown-root {
+  font-family: "Plus Jakarta Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 15.5px;
+  line-height: 1.75;
+  color: #1e293b;
+  word-break: break-word;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --------------------------------------------------------
+   Headings Hierarchy
+-------------------------------------------------------- */
+
+.edviko-md-h1,
+.edviko-md-h2,
+.edviko-md-h3,
+.edviko-md-h4 {
+  font-family: "Plus Jakarta Sans", Inter, sans-serif;
+  line-height: 1.35;
+  margin-top: 22px;
+  margin-bottom: 10px;
+}
+
+.edviko-md-h1:first-child,
+.edviko-md-h2:first-child,
+.edviko-md-h3:first-child {
+  margin-top: 0;
+}
+
+.edviko-md-h1 {
+  font-size: 26px;
+  font-weight: 800;
+  color: #1e1b4b;
+  letter-spacing: -0.025em;
+  padding-bottom: 6px;
+  border-bottom: 1.5px solid #ede9fe;
+}
+
+.edviko-md-h2 {
+  font-size: 21px;
+  font-weight: 700;
+  color: #2e1065;
+  letter-spacing: -0.018em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edviko-md-h3 {
+  font-size: 18.5px;
+  font-weight: 700;
+  color: #4c1d95;
+  letter-spacing: -0.012em;
+}
+
+.edviko-md-h4 {
+  font-size: 16.5px;
+  font-weight: 600;
+  color: #581c87;
+}
+
+/* --------------------------------------------------------
+   Paragraphs & Formatting
+-------------------------------------------------------- */
+
+.edviko-md-p {
+  margin-top: 0;
+  margin-bottom: 14px;
+  font-size: 15.5px;
+  line-height: 1.78;
+  color: #334155;
+}
+
+.edviko-md-p:last-child {
+  margin-bottom: 0;
+}
+
+.edviko-md-strong {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.edviko-markdown-root em {
+  font-style: italic;
+  color: #475569;
+}
+
+/* Links */
+.edviko-md-link {
+  color: #7c3aed;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
+}
+
+.edviko-md-link:hover {
+  color: #5b21b6;
+}
+
+/* --------------------------------------------------------
+   Lists (Unordered & Ordered)
+-------------------------------------------------------- */
+
+.edviko-md-ul,
+.edviko-md-ol {
+  margin-top: 4px;
+  margin-bottom: 14px;
+  padding-left: 24px;
+}
+
+.edviko-md-li {
+  margin-bottom: 6px;
+  line-height: 1.75;
+  color: #334155;
+}
+
+.edviko-md-li::marker {
+  color: #7c3aed;
+  font-weight: 700;
+}
+
+.edviko-md-ul .edviko-md-ul,
+.edviko-md-ol .edviko-md-ol,
+.edviko-md-ul .edviko-md-ol,
+.edviko-md-ol .edviko-md-ul {
+  margin-top: 4px;
+  margin-bottom: 4px;
+  padding-left: 20px;
+}
+
+/* --------------------------------------------------------
+   Horizontal Rule
+-------------------------------------------------------- */
+
+.edviko-md-hr {
+  border: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, #e2e8f0, #ddd6fe, #e2e8f0, transparent);
+  margin: 22px 0;
+}
+
+/* --------------------------------------------------------
+   Blockquote Callout
+-------------------------------------------------------- */
+
+.edviko-markdown-blockquote {
+  margin: 16px 0;
+  padding: 12px 18px;
+  background: #faf5ff;
+  border-left: 4px solid #7c3aed;
+  border-radius: 0 10px 10px 0;
+  display: flex;
+  position: relative;
+}
+
+.edviko-blockquote-content {
+  flex: 1;
+  color: #4c1d95;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.edviko-blockquote-content p {
+  margin-bottom: 8px;
+}
+
+.edviko-blockquote-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* --------------------------------------------------------
+   Inline Code
+-------------------------------------------------------- */
+
+.edviko-inline-code {
+  font-family: "JetBrains Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
+  font-size: 13.5px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+  white-space: pre-wrap;
+}
+
+/* --------------------------------------------------------
+   Code Block Card (with Language & Copy Button)
+-------------------------------------------------------- */
+
+.edviko-code-card {
+  margin: 18px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #334155;
+  background: #0f172a;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.18);
+}
+
+.edviko-code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #1e293b;
+  padding: 8px 16px;
+  border-bottom: 1px solid #334155;
+}
+
+.edviko-code-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #cbd5e1;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.edviko-code-icon {
+  font-size: 12px;
+}
+
+.edviko-code-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #334155;
+  color: #e2e8f0;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.edviko-code-copy-btn:hover {
+  background: #475569;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.edviko-code-pre {
+  margin: 0 !important;
+  padding: 14px 18px !important;
+  overflow-x: auto;
+  background: #0f172a !important;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: #f8fafc;
+}
+
+.edviko-code-pre code {
+  background: transparent !important;
+  padding: 0 !important;
+  border: none !important;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* --------------------------------------------------------
+   Responsive Tables
+-------------------------------------------------------- */
+
+.edviko-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 18px 0;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.edviko-markdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+  text-align: left;
+}
+
+.edviko-markdown-table th {
+  background: #f5f3ff;
+  color: #5b21b6;
+  font-weight: 700;
+  padding: 12px 16px;
+  border-bottom: 2px solid #ddd6fe;
+  white-space: nowrap;
+}
+
+.edviko-markdown-table td {
+  padding: 11px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.edviko-markdown-table tr:nth-child(even) td {
+  background: #faf8ff;
+}
+
+.edviko-markdown-table tr:hover td {
+  background: #f3e8ff;
+  transition: background 0.15s ease;
+}
+
+.edviko-markdown-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* --------------------------------------------------------
+   Mobile Responsiveness
+-------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  .edviko-markdown-root {
+    font-size: 14.5px;
+    line-height: 1.7;
+  }
+
+  .edviko-md-h1 {
+    font-size: 22px;
+  }
+
+  .edviko-md-h2 {
+    font-size: 19px;
+  }
+
+  .edviko-md-h3 {
+    font-size: 17px;
+  }
+
+  .edviko-code-pre {
+    padding: 12px 14px !important;
+    font-size: 12.5px;
+  }
+
+  .edviko-markdown-table th,
+  .edviko-markdown-table td {
+    padding: 8px 12px;
+    font-size: 13.5px;
+  }
+}

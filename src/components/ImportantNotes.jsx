@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { aiApi } from "../services/api";
 import { useToast } from "../context/useToast";
+import MarkdownRenderer from "./MarkdownRenderer";
 import "./ImportantNotes.css";
 
 function ImportantNotes({ onBack, language = "English", onLanguageChange, text = "", documentId = null, initialNotes = "", initialQuickNotes = "" }) {
@@ -285,15 +286,8 @@ function ImportantNotes({ onBack, language = "English", onLanguageChange, text =
             <span className="notes-language-badge">{language}</span>
           </div>
 
-          <div
-            className="notes-body"
-            style={{
-              whiteSpace: "pre-wrap",
-              lineHeight: 1.7,
-              fontSize: "15px",
-            }}
-          >
-            {currentContent}
+          <div className="notes-body">
+            <MarkdownRenderer content={currentContent} />
           </div>
         </motion.div>
       )}

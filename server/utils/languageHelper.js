@@ -35,6 +35,11 @@ const detectLanguageSwitch = (text) => {
     return null;
   }
 
+  // If user is asking for specific content (joke, riddle, explanation, doubt, question, story), don't treat as a pure switch command
+  if (/\b(joke|chutkula|riddle|puzzle|kahani|story|fact|formula|difference|concept|doubt|batao|bata|sunao|suna|padhai|game|quiz|meaning|arth|kya|kyu|kaise|why|what|how)\b/i.test(cleaned)) {
+    return null;
+  }
+
   // Devanagari script direct matches
   if (/^(हिंदी|हिन्दी)(\s*(में|मे))?$/i.test(raw.trim().replace(/[?!.,;:]+$/, ""))) return "Hindi";
   if (/^(मराठी|मराठीत)(\s*(मध्ये|त))?$/i.test(raw.trim().replace(/[?!.,;:]+$/, ""))) return "Marathi";

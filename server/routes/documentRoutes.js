@@ -10,9 +10,10 @@ const { authenticate, requireRole } = require("../middleware/authMiddleware");
 
 router.use(authenticate);
 
-router.post("/", requireRole("student"), createDocument);
-router.get("/", requireRole("student"), getMyDocuments);
+// Both students and teachers can upload study documents and access course materials
+router.post("/", createDocument);
+router.get("/", getMyDocuments);
 router.get("/:id", getDocumentById); // accessible to student owner or assigned teacher
-router.delete("/:id", requireRole("student"), deleteDocument);
+router.delete("/:id", deleteDocument);
 
 module.exports = router;

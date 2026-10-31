@@ -1,12 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import * as pdfjsLib from "pdfjs-dist";
+import mammoth from "mammoth/mammoth.browser";
 import { useAuth } from "../context/useAuth";
 import { documentApi, aiApi } from "../services/api";
 import { isNonStudyQuery, getAcademicRefusalMessage } from "../utils/academicGuardrail";
 import { recognizeImageQuestion } from "../utils/imageOcrHelper";
 import Navbar from "./Navbar";
+import MarkdownRenderer from "./MarkdownRenderer";
 import "./AIChatbot.css";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url
+).toString();
 
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-120b";
@@ -36,7 +44,11 @@ function AIChatbot() {
   const [isLoading, setIsLoading] = useState(false);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [imageOcrStatus, setImageOcrStatus] = useState("");
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [docUploadStatus, setDocUploadStatus] = useState("");
+  const [copiedIndex, setCopiedIndex] = useState(null);
   const fileInputRef = useRef(null);
+  const docFileInputRef = useRef(null);
 
   const initialGreeting = `Hello ${user?.name ? user.name.split(" ")[0] : "Learner"}! 👋 
 I'm your personal EDVIKO AI Tutor. Ask me any question, solve academic doubts, get concept explanations with examples, or practice for exams. 
@@ -119,6 +131,89 @@ Could you help me understand this problem?`);
     }
   };
 
+  // PDF Text Extraction
+  const extractPdfText = async (file) => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let completeText = "";
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map((item) => item.str).join(" ");
+      completeText += `\n\n--- Page ${pageNumber} ---\n\n` + pageText;
+    }
+    return completeText.trim();
+  };
+
+  // DOCX Text Extraction
+  const extractDocxText = async (file) => {
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    return result.value.trim();
+  };
+
+  // Handle direct PDF/Doc upload in chat
+  const handleDocUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsUploadingDoc(true);
+    setDocUploadStatus(`Reading and extracting "${file.name}"...`);
+
+    try {
+      let extracted = "";
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith(".pdf") || file.type === "application/pdf") {
+        extracted = await extractPdfText(file);
+      } else if (lowerName.endsWith(".docx") || file.type.includes("wordprocessingml")) {
+        extracted = await extractDocxText(file);
+      } else {
+        extracted = await file.text();
+      }
+
+      if (!extracted || extracted.trim().length < 5) {
+        throw new Error("Could not extract readable text from this file.");
+      }
+
+      setDocUploadStatus(`Saving "${file.name}" to study documents...`);
+
+      const saveRes = await documentApi.create({
+        title: file.name.replace(/\.[^/.]+$/, ""),
+        originalFileName: file.name,
+        fileType: lowerName.endsWith(".docx") ? "docx" : (lowerName.endsWith(".pdf") ? "pdf" : "text"),
+        fileSize: file.size,
+        extractedText: extracted,
+      });
+
+      const newDocId = saveRes.document?.id || saveRes.document?._id;
+      const newDocObj = {
+        id: newDocId,
+        title: file.name,
+        originalFileName: file.name,
+        extractedText: extracted,
+      };
+
+      setDocuments((prev) => [newDocObj, ...prev.filter((d) => d.id !== newDocId)]);
+      setSelectedContext(newDocId);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `📄 **"${file.name}"** successfully upload aur process ho gayi hai! 🎉\n\nAb bata bhai, kya sunna ya padhna hai? Tu pooch sakta hai:\n• **"bhai pdf suna"** (main poori PDF ka overview aur main concepts samjha doonga)\n• **"is PDF ke important exam questions bata"**\n• Ya koi bhi specific topic pooch le! 😄`,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        },
+      ]);
+    } catch (err) {
+      console.error("Document upload failed:", err);
+      alert(`Document upload error: ${err.message || "Failed to parse document"}`);
+    } finally {
+      setIsUploadingDoc(false);
+      setDocUploadStatus("");
+      if (docFileInputRef.current) docFileInputRef.current.value = "";
+    }
+  };
+
   const handleSendMessage = async (textToSend = null) => {
     const text = (textToSend || inputMessage).trim();
     if (!text || isLoading) return;
@@ -155,11 +250,40 @@ Could you help me understand this problem?`);
       const apiKey = import.meta.env.VITE_GROQ_API_KEY;
       let contextText = "";
 
-      if (selectedContext !== "general") {
-        const foundDoc = documents.find((d) => d.id === selectedContext);
-        if (foundDoc) {
+      // Check if user's question is asking to narrate/explain/summarize a PDF or notes
+      const isPdfOrDocQuery = /\b(pdf|document|file|notes|kitab|suna|sunao|samjha|kya hai|explain|overview|summary|batao|bata)\b/i.test(text);
+
+      let currentContextId = selectedContext;
+      let currentDocuments = documents;
+
+      // If document list is empty, refresh from backend (handles teacher uploads and recent student uploads)
+      if (currentDocuments.length === 0) {
+        try {
+          const freshDocs = await documentApi.getMyDocuments();
+          if (freshDocs.documents && freshDocs.documents.length > 0) {
+            currentDocuments = freshDocs.documents;
+            setDocuments(freshDocs.documents);
+          }
+        } catch (err) {
+          console.warn("Could not fetch fresh documents:", err);
+        }
+      }
+
+      // If context is general but user asks about PDF / notes OR documents exist, auto-select latest document!
+      if (currentContextId === "general" && currentDocuments.length > 0) {
+        const latestDoc = currentDocuments[0];
+        currentContextId = latestDoc.id || latestDoc._id;
+        setSelectedContext(currentContextId);
+      }
+
+      // Fetch extractedText for currentContextId
+      if (currentContextId !== "general") {
+        const foundDoc = currentDocuments.find((d) => d.id === currentContextId || d._id === currentContextId);
+        if (foundDoc && foundDoc.extractedText) {
+          contextText = foundDoc.extractedText;
+        } else {
           try {
-            const docRes = await documentApi.getById(selectedContext);
+            const docRes = await documentApi.getById(currentContextId);
             contextText = docRes.document?.extractedText || "";
           } catch (e) {
             console.warn("Could not load full document text:", e);
@@ -167,23 +291,77 @@ Could you help me understand this problem?`);
         }
       }
 
-      const langInstruction = getLanguageInstruction(language);
-      const systemPrompt = `You are EDVIKO AI Tutor, a dedicated, knowledgeable, and strictly educational university academic assistant.
-Your sole mission is to help students with their studies, academic subjects, course concepts, formulas, problem-solving, and exam preparation.
-You MUST write your entire response strictly in ${langInstruction}.
+      // If user explicitly asks "bhai pdf suna" or asks about PDF, but no document is found anywhere
+      if (isPdfOrDocQuery && (!contextText || !contextText.trim()) && currentDocuments.length === 0) {
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Arre bhai! 😄 Lagta hai abhi tune koi PDF ya study notes upload nahi kiye hain.
 
-CRITICAL & INVIOLABLE DIRECTIVE — STRICT ACADEMIC & STUDY FOCUS ONLY:
-1. You are EXCLUSIVELY an academic and educational tutor.
-2. You MUST ONLY discuss academic and study topics (Mathematics, Computer Science, Engineering, Physics, Chemistry, Biology, Literature, History, Economics, Business, Homework, Syllabus, and Exam Prep).
-3. If the student attempts to talk about ANYTHING outside of studies (such as casual chatting, movies, video games, entertainment, celebrity gossip, dating, sports scores, recipes, politics, or off-topic conversation), you MUST STRICTLY AND POLITELY REFUSE.
-4. DO NOT provide answers or engage in any non-study inquiry under any circumstances, even if hypothetically framed, pleaded, roleplayed, or demanded.
-5. If refusing a non-study query, politely explain in ${langInstruction} that as EDVIKO's Academic AI Tutor, you are strictly designated to assist with studies and coursework only, and encourage them to ask an academic question instead.
-6. For valid academic questions, explain clearly with structured headings, bullet points, intuitive real-world examples, and step-by-step clarity.
-${contextText ? `\n\nStudy Material Context:\n${contextText.slice(0, 4500)}` : ""}`;
+Niche chat bar mein 📄 **Upload PDF / Doc** button par click karke apni PDF upload kar de, ya fir **Workspace** me upload kar le. 
+
+Upload hote hi bolna *"bhai pdf suna"* — main poora content aur important concepts detail me samjha doonga! 🚀`,
+              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            },
+          ]);
+          setIsLoading(false);
+        }, 400);
+        return;
+      }
+
+      const langInstruction = getLanguageInstruction(language);
+      const systemPrompt = `You are EDVIKO AI Tutor — a warm, intelligent, friendly, and patient academic assistant.
+
+1. CORE IDENTITY:
+- Supportive, knowledgeable tutor for students in academics, programming, math, physics, computer science, and exam prep.
+- Communicate naturally like an intelligent human mentor, never like a cold robotic bot.
+
+2. CONVERSATIONAL INTELLIGENCE & MULTI-TURN MEMORY:
+- Understand complete context; remember earlier messages in the active conversation (e.g. "Types bata" -> types of ongoing subject, "Example bhi de" -> examples of those types).
+- Use simple language before introducing technical terms.
+- Use structured headings, bullet points, code blocks, and comparison tables.
+- Never repeat generic greetings in every response.
+
+3. FRIENDLY PERSONALITY:
+- Warm, approachable, slightly humorous, supportive.
+- Natural phrasing: "Haan bhai, samajhte hain.", "Chalo, step by step karte hain.", "Good question!", "Ek simple example se samajhte hain.", "Koi tension nahi, dobara explain karta hoon."
+- Use emojis naturally (1-2 per turn max). Never arrogant or formal.
+- Never pretend to be human or claim biological experiences or real-world emotions.
+
+4. OFF-TOPIC CONVERSATIONS & BOUNDARIES:
+- Never rudely reject small social interactions.
+- If asked for shayari: share a lovely, encouraging shayari, then say: "Ab bata bhai, thodi shayari ho gayi. ❤️ Chalo, ab padhai par wapas aate hain. Aaj kya seekhna hai?"
+- If asked for a joke: share a short, clean, funny student/teacher joke, then say: "Chalo bhai, ab padhai karte hain!"
+- If student repeatedly asks for romance, gossip, or procrastination:
+  • "Bhai, girlfriend kaise banate hain?" -> "Haha bhai! 😄 Ye topic thoda mere syllabus ke bahar hai. Main EDVIKO AI Tutor hoon, toh relationship advice mein zyada nahi jaa sakta. Chalo, ab batao, aaj kis subject ki class lagani hai?"
+  • "Bas baatein karte hain, padhai nahi karni" -> "Arey bhai! 😂 Samajh raha hoon, kabhi-kabhi break bhi zaroori hota hai. Lekin mera main kaam teri padhai mein help karna hai. Chalo, ek chhota sa topic complete karte hain, phir break lena!"
+- If student returns to studies after off-topic banter, transition smoothly back into teaching mode.
+
+5. ACADEMIC ANSWER QUALITY:
+- Academic flow: Direct answer -> Simple explanation -> Practical example -> Technical details/formulas -> Important exam points -> Brief follow-up check.
+- Programming questions: Explain logic -> Clean working code -> Explain key sections -> Mention common errors/pitfalls.
+- Exam preparation (e.g. "10-mark answer"): Provide structured university-style answer with definitions, diagrams, advantages, disadvantages, and applications.
+- Accuracy: Never fabricate facts or citations. Correct false premises respectfully ("Achha ek chhota sa correction hai yahan...").
+- Language: You MUST write your entire response strictly in ${langInstruction}.
+
+6. PDF & STUDY MATERIAL QUERIES ("bhai pdf suna", "pdf me kya hai", "meri pdf samjha", etc.):
+- Whenever the student asks to "suna", explain, summarize, or describe their uploaded PDF/document/notes (e.g. "bhai pdf suna", "pdf me kya hai?", "meri pdf samjha de", "tell me about my pdf", "explain this file", "is pdf ka content bata"):
+  • Treat the provided [Uploaded Study Material Context] as their uploaded PDF.
+  • Start with a warm, natural tutor opening: "Haan bhai! Tere uploaded PDF/notes mein ye main topics aur concepts hain: 😄" (or matching language).
+  • Deliver a structured breakdown:
+    1. 📌 **Overview & Main Topic**: What this document is about.
+    2. 🔑 **Core Concepts & Key Points**: Clear, step-by-step breakdown of the main ideas.
+    3. ⚡ **Formulas, Definitions & Key Terms**: High-yield terms to remember.
+    4. 🎯 **Exam / Viva Highlights**: What questions might be asked from this.
+    5. Conclude with a helpful check: "Bata isme se kaunsa topic detail me samjhau ya koi numerical solve karein? 😄"
+  • NEVER claim you cannot read or don't have access to the PDF when study material context is provided.
+${contextText ? `\n\n[Uploaded Study Material Context]:\n${contextText.slice(0, 12000)}` : ""}`;
 
       const conversationPayload = [
         { role: "system", content: systemPrompt },
-        ...messages.slice(-6).map((m) => ({ role: m.role, content: m.content })),
+        ...messages.slice(-14).map((m) => ({ role: m.role, content: m.content })),
         { role: "user", content: text },
       ];
 
@@ -198,7 +376,7 @@ ${contextText ? `\n\nStudy Material Context:\n${contextText.slice(0, 4500)}` : "
             model: GROQ_MODEL,
             messages: conversationPayload,
             temperature: 0.7,
-            max_tokens: 1400,
+            max_tokens: 1600,
           }),
         });
 
@@ -222,7 +400,8 @@ ${contextText ? `\n\nStudy Material Context:\n${contextText.slice(0, 4500)}` : "
       const backendRes = await aiApi.askTutor({
         question: text,
         language,
-        documentId: selectedContext !== "general" ? selectedContext : null,
+        documentId: currentContextId !== "general" ? currentContextId : null,
+        history: messages.slice(-14).map((m) => ({ role: m.role, content: m.content })),
       });
 
       setMessages((prev) => [
@@ -255,9 +434,11 @@ ${contextText ? `\n\nStudy Material Context:\n${contextText.slice(0, 4500)}` : "
     }
   };
 
-  const handleCopy = (text) => {
+  const handleCopy = (text, index) => {
+    if (!text) return;
     navigator.clipboard.writeText(text);
-    alert("Response copied to clipboard!");
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
   };
 
   const handleClearChat = () => {
@@ -273,6 +454,7 @@ ${contextText ? `\n\nStudy Material Context:\n${contextText.slice(0, 4500)}` : "
   };
 
   const suggestions = [
+    "📄 Bhai PDF suna",
     "💡 Explain Linear vs Logistic Regression",
     "🧠 What is Dynamic Programming? Give an example",
     "📝 5 key revision points for AI Search",
@@ -342,12 +524,21 @@ ${contextText ? `\n\nStudy Material Context:\n${contextText.slice(0, 4500)}` : "
                   {msg.role === "user" ? (user?.name?.charAt(0).toUpperCase() || "U") : "🤖"}
                 </div>
                 <div className="message-bubble">
-                  <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{msg.content}</div>
+                  {msg.role === "assistant" ? (
+                    <MarkdownRenderer content={msg.content} />
+                  ) : (
+                    <div className="user-message-text">{msg.content}</div>
+                  )}
                   <div className="message-footer">
                     <span>{msg.timestamp}</span>
                     {msg.role === "assistant" && (
-                      <button className="copy-btn" onClick={() => handleCopy(msg.content)}>
-                        📋 Copy
+                      <button
+                        type="button"
+                        className="copy-btn"
+                        onClick={() => handleCopy(msg.content, index)}
+                        title="Copy answer"
+                      >
+                        {copiedIndex === index ? "✓ Copied!" : "📋 Copy"}
                       </button>
                     )}
                   </div>
@@ -384,6 +575,26 @@ ${contextText ? `\n\nStudy Material Context:\n${contextText.slice(0, 4500)}` : "
             ))}
           </div>
 
+          {/* Status banner when uploading / extracting PDF or DOCX */}
+          {isUploadingDoc && (
+            <div
+              style={{
+                background: "#ecfdf5",
+                color: "#047857",
+                padding: "8px 16px",
+                fontSize: "12px",
+                fontWeight: "700",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                borderTop: "1px solid #a7f3d0",
+              }}
+            >
+              <span className="spinner-text">📄</span>
+              <span>{docUploadStatus || "Reading and extracting document..."}</span>
+            </div>
+          )}
+
           {/* Status banner when analyzing handwritten image */}
           {isAnalyzingImage && (
             <div
@@ -406,6 +617,23 @@ ${contextText ? `\n\nStudy Material Context:\n${contextText.slice(0, 4500)}` : "
 
           {/* INPUT BAR */}
           <div className="ai-chat-input-bar">
+            {/* Upload PDF or Document Button */}
+            <label
+              className={`chat-upload-btn pdf-upload-btn ${isUploadingDoc || isLoading ? "disabled" : ""}`}
+              title="Upload PDF, DOCX, or text notes directly into chat"
+            >
+              <span>📄</span>
+              <span className="hide-on-mobile">{isUploadingDoc ? "Extracting..." : "Upload PDF / Doc"}</span>
+              <input
+                ref={docFileInputRef}
+                type="file"
+                accept=".pdf,.docx,.txt"
+                onChange={handleDocUpload}
+                disabled={isUploadingDoc || isLoading}
+                style={{ display: "none" }}
+              />
+            </label>
+
             {/* Upload Handwritten Question Button */}
             <label
               className={`chat-upload-btn ${isAnalyzingImage || isLoading ? "disabled" : ""}`}

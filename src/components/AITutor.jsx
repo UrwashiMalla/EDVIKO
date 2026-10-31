@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { aiApi } from "../services/api";
 import { useToast } from "../context/useToast";
 import { isNonStudyQuery, getAcademicRefusalMessage } from "../utils/academicGuardrail";
+import MarkdownRenderer from "./MarkdownRenderer";
 import "./AITutor.css";
 
 /**
@@ -22,6 +23,11 @@ const detectLanguageSwitch = (text) => {
     return null;
   }
   if (/^(what|why|how|when|who|where|which|kya|kyu|kaise|kon|konta|kiti)\b/i.test(cleaned) && /\b(is|are|was|were|ahe|hote|hota|hai|tha|the)\b/i.test(cleaned)) {
+    return null;
+  }
+
+  // If user is asking for specific content (joke, riddle, explanation, doubt, question, story), don't treat as a pure switch command
+  if (/\b(joke|chutkula|riddle|puzzle|kahani|story|fact|formula|difference|concept|doubt|batao|bata|sunao|suna|padhai|game|quiz|meaning|arth|kya|kyu|kaise|why|what|how)\b/i.test(cleaned)) {
     return null;
   }
 
@@ -61,6 +67,14 @@ function AITutor({ onBack, language = "English", onLanguageChange, text = "", do
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [copiedMsgIdx, setCopiedMsgIdx] = useState(null);
+
+  const handleCopyMessage = (msgContent, idx) => {
+    if (!msgContent) return;
+    navigator.clipboard.writeText(msgContent);
+    setCopiedMsgIdx(idx);
+    setTimeout(() => setCopiedMsgIdx(null), 2000);
+  };
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -352,12 +366,28 @@ function AITutor({ onBack, language = "English", onLanguageChange, text = "", do
                 </div>
 
                 <div className="message-content">
-                  <span className="message-name">
-                    {message.role === "user" ? "You" : `EDVIKO AI Tutor (${message.language || activeLanguage})`}
-                  </span>
-                  <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-                    {message.content}
-                  </p>
+                  <div className="message-header-row">
+                    <span className="message-name">
+                      {message.role === "user" ? "You" : `EDVIKO AI Tutor (${message.language || activeLanguage})`}
+                    </span>
+                    {message.role === "assistant" && (
+                      <button
+                        type="button"
+                        className="tutor-copy-btn"
+                        onClick={() => handleCopyMessage(message.content, index)}
+                        title="Copy answer"
+                      >
+                        {copiedMsgIdx === index ? "✓ Copied!" : "📋 Copy"}
+                      </button>
+                    )}
+                  </div>
+                  {message.role === "assistant" ? (
+                    <MarkdownRenderer content={message.content} />
+                  ) : (
+                    <p className="user-message-text" style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+                      {message.content}
+                    </p>
+                  )}
                 </div>
               </motion.div>
             ))}

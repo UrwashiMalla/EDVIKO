@@ -12,7 +12,7 @@ const {
 /**
  * Helper to resolve text from documentId or body.text
  */
-const resolveDocumentText = async (req) => {
+const resolveDocumentText = async (req, isOptional = false) => {
   const { documentId, text } = req.body;
 
   if (documentId) {
@@ -20,12 +20,17 @@ const resolveDocumentText = async (req) => {
     if (!doc) {
       throw new Error("Document not found with the provided ID.");
     }
-    // Verify ownership if student
-    if (req.user.role === "student" && !doc.studentId.equals(req.user._id)) {
-      throw new Error("Unauthorized to access this document.");
+    // Verify ownership if student (allow if student owns it or if it is teacher material)
+    if (req.user.role === "student" && !doc.studentId.equals(req.user._id) && !doc.isTeacherMaterial) {
+      const StudentProfile = require("../models/StudentProfile");
+      const profile = await StudentProfile.findOne({ userId: req.user._id });
+      const isFromTeacher = profile && profile.teacherId && doc.teacherId && profile.teacherId.equals(doc.teacherId);
+      if (!isFromTeacher) {
+        throw new Error("Unauthorized to access this document.");
+      }
     }
     return {
-      text: doc.extractedText,
+      text: doc.extractedText || "",
       documentId: doc._id,
       studentId: doc.studentId,
     };
@@ -36,6 +41,14 @@ const resolveDocumentText = async (req) => {
       text: text.trim(),
       documentId: null,
       studentId: req.user._id,
+    };
+  }
+
+  if (isOptional) {
+    return {
+      text: "",
+      documentId: null,
+      studentId: req.user ? req.user._id : null,
     };
   }
 
@@ -288,7 +301,31 @@ const askTutor = async (req, res, next) => {
       });
     }
 
-    const { text, documentId, studentId } = await resolveDocumentText(req);
+    let { text, documentId, studentId } = await resolveDocumentText(req, true);
+
+    // If query is sent without documentId/text, automatically ground to the student's latest uploaded PDF / study material
+    if ((!text || !text.trim()) && !documentId && req.user) {
+      try {
+        const StudentProfile = require("../models/StudentProfile");
+        const profile = await StudentProfile.findOne({ userId: req.user._id });
+        const teacherId = profile?.teacherId;
+
+        const latestDoc = await Document.findOne({
+          $or: [
+            { studentId: req.user._id },
+            ...(teacherId ? [{ teacherId }] : []),
+            { isTeacherMaterial: true },
+          ],
+        }).sort({ createdAt: -1 });
+
+        if (latestDoc) {
+          text = latestDoc.extractedText || "";
+          documentId = latestDoc._id;
+        }
+      } catch (docErr) {
+        console.warn("Auto document grounding fallback warning:", docErr.message);
+      }
+    }
 
     // 1. Language-Switch Intent Detection BEFORE Document QA
     const switchTarget = detectLanguageSwitch(question);
@@ -324,7 +361,7 @@ const askTutor = async (req, res, next) => {
         isLanguageSwitch: true,
         language: activeLanguage,
         answer: switchAnswer,
-        history: chat ? chat.messages : [],
+        history: chat ? chat.messages : (Array.isArray(req.body.history) ? req.body.history : []),
       });
     }
 
@@ -339,6 +376,8 @@ const askTutor = async (req, res, next) => {
       if (chat) {
         history = chat.messages;
       }
+    } else if (Array.isArray(req.body.history)) {
+      history = req.body.history;
     }
 
     // Generate grounded response in target language

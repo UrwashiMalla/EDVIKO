@@ -12,7 +12,38 @@ import {
   uploadLecture,
   deleteLecture,
 } from "../services/frontendStorage";
+import { documentApi } from "../services/api";
 import Navbar from "./Navbar";
+import * as pdfjsLib from "pdfjs-dist";
+import mammoth from "mammoth/mammoth.browser";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url
+).toString();
+
+const extractFileContent = async (file) => {
+  if (!file) return "";
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".pdf") || file.type === "application/pdf") {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let completeText = "";
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map((item) => item.str).join(" ");
+      completeText += `\n\n--- Page ${pageNumber} ---\n\n` + pageText;
+    }
+    return completeText.trim();
+  } else if (name.endsWith(".docx") || file.type.includes("wordprocessingml")) {
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    return result.value.trim();
+  } else {
+    return await file.text();
+  }
+};
 
 function TeacherDocuments() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -202,15 +233,40 @@ function TeacherDocuments() {
     }
   };
 
-  const handleNotesFileUpload = (e) => {
+  const handleNotesFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setAiNotesText(event.target.result || "");
-      showToast(`Loaded text from "${file.name}" into notes block!`);
-    };
-    reader.readAsText(file);
+    showToast(`Reading "${file.name}"...`);
+    try {
+      const text = await extractFileContent(file);
+      if (text) {
+        setAiNotesText(text);
+        showToast(`Loaded content from "${file.name}"!`);
+      }
+    } catch (err) {
+      console.warn("Failed to extract notes file:", err);
+      showToast(`Could not extract text: ${err.message}`);
+    }
+  };
+
+  const handleNoteFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setNoteFileName(file.name);
+    if (!noteTitle.trim()) {
+      setNoteTitle(file.name.replace(/\.[^/.]+$/, ""));
+    }
+    showToast(`Extracting text from "${file.name}"...`);
+    try {
+      const text = await extractFileContent(file);
+      if (text) {
+        setNoteContent(text);
+        showToast(`Extracted ${text.length} characters from "${file.name}"!`);
+      }
+    } catch (err) {
+      console.warn("PDF extraction error:", err);
+      showToast(`Extraction warning: ${err.message}`);
+    }
   };
 
   const handlePublishQuiz = (e) => {
@@ -266,6 +322,17 @@ function TeacherDocuments() {
       content: noteContent.trim() || noteDescription.trim(),
       fileName: noteFileName ? noteFileName.replace(/^.*[\\\/]/, "") : "Lecture_Handout.pdf",
     });
+
+    // Also persist as an official backend Document in MongoDB so it syncs to student documents & AI Tutor
+    const textToSave = noteContent.trim() || noteDescription.trim() || "Course study notes prepared by faculty.";
+    if (textToSave.length > 5) {
+      documentApi.create({
+        title: noteTitle.trim(),
+        extractedText: textToSave,
+        fileType: "pdf",
+        originalFileName: noteFileName ? noteFileName.replace(/^.*[\\\/]/, "") : "Faculty_Handout.pdf",
+      }).catch((err) => console.warn("Backend document sync note:", err.message));
+    }
 
     setNotes(updated);
     setNoteTitle("");
@@ -1056,7 +1123,7 @@ function TeacherDocuments() {
                       <input
                         type="file"
                         accept=".pdf,.docx,.txt"
-                        onChange={(e) => setNoteFileName(e.target.value)}
+                        onChange={handleNoteFileChange}
                         style={{ fontSize: "12px", marginLeft: "6px" }}
                       />
                     </label>

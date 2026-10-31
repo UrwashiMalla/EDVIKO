@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { aiApi } from "../services/api";
 import { useToast } from "../context/useToast";
+import MarkdownRenderer from "./MarkdownRenderer";
 import "./SmartSummary.css";
 
 function SmartSummary({ onBack, language = "English", onLanguageChange, text = "", documentId = null, initialSummary = "" }) {
@@ -216,15 +217,8 @@ function SmartSummary({ onBack, language = "English", onLanguageChange, text = "
             <span className="summary-language-badge">{language}</span>
           </div>
 
-          <div
-            className="summary-text"
-            style={{
-              whiteSpace: "pre-wrap",
-              lineHeight: 1.7,
-              fontSize: "15px",
-            }}
-          >
-            {summary}
+          <div className="summary-text">
+            <MarkdownRenderer content={summary} />
           </div>
         </motion.div>
       )}

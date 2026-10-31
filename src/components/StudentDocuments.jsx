@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { documentApi } from "../services/api";
+import { onLerniqSync } from "../services/frontendStorage";
 import Navbar from "./Navbar";
 
 function StudentDocuments() {
@@ -10,27 +11,35 @@ function StudentDocuments() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  useEffect(() => {
-    let ignore = false;
+  const loadDocuments = (isInitial = false) => {
+    if (isInitial) setLoading(true);
     documentApi.getMyDocuments()
       .then((res) => {
-        if (!ignore && res.documents) {
+        if (res.documents) {
           setDocuments(res.documents);
         }
       })
       .catch((err) => {
-        if (!ignore) {
-          console.error("Failed to load documents:", err);
-          setError(err.message || "Failed to load document history.");
-        }
+        console.error("Failed to load documents:", err);
+        setError(err.message || "Failed to load document history.");
       })
       .finally(() => {
-        if (!ignore) setLoading(false);
+        if (isInitial) setLoading(false);
       });
+  };
 
-    return () => {
-      ignore = true;
-    };
+  useEffect(() => {
+    loadDocuments(true);
+    const unsubscribe = onLerniqSync((detail) => {
+      if (
+        detail.type === "NOTE_UPLOADED" ||
+        detail.type === "NOTE_DELETED" ||
+        detail.type === "DOCUMENT_UPLOADED"
+      ) {
+        loadDocuments(false);
+      }
+    });
+    return unsubscribe;
   }, []);
 
   const handleDelete = async (id, e) => {
@@ -156,23 +165,32 @@ function StudentDocuments() {
               >
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <span style={{ fontSize: "24px" }}>
-                      {getDocIcon(doc)}
-                    </span>
-                    <button
-                      onClick={(e) => handleDelete(doc.id, e)}
-                      title="Delete document"
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "#ef4444",
-                        cursor: "pointer",
-                        fontSize: "14px",
-                        padding: "4px 8px",
-                      }}
-                    >
-                      🗑️
-                    </button>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontSize: "24px" }}>
+                        {getDocIcon(doc)}
+                      </span>
+                      {doc.isTeacherMaterial && (
+                        <span style={{ fontSize: "11px", fontWeight: "700", background: "#fef3c7", color: "#92400e", padding: "3px 8px", borderRadius: "6px" }}>
+                          👨‍🏫 Faculty Document {doc.teacherName ? `• ${doc.teacherName}` : ""}
+                        </span>
+                      )}
+                    </div>
+                    {!doc.isTeacherMaterial && (
+                      <button
+                        onClick={(e) => handleDelete(doc.id, e)}
+                        title="Delete document"
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#ef4444",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                          padding: "4px 8px",
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    )}
                   </div>
 
                   <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#1f2937", marginTop: "12px", marginBottom: "6px" }}>
