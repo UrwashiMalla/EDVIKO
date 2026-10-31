@@ -291,22 +291,6 @@ function TeacherDocuments() {
     }
   };
 
-  const handleNotesFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    showToast(`Reading "${file.name}"...`);
-    try {
-      const text = await extractFileContent(file);
-      if (text) {
-        setAiNotesText(text);
-        showToast(`Loaded content from "${file.name}"!`);
-      }
-    } catch (err) {
-      console.warn("Failed to extract notes file:", err);
-      showToast(`Could not extract text: ${err.message}`);
-    }
-  };
-
   const handleNoteFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
