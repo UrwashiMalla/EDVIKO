@@ -103,29 +103,44 @@ You can speak to me in English, Hinglish, Hindi, or Marathi! How can I help you 
     if (!file) return;
 
     setIsAnalyzingImage(true);
-    setImageOcrStatus(`Reading handwritten notes from "${file.name}"...`);
+    setImageOcrStatus(`Analyzing notebook handwriting from "${file.name}"...`);
+
+    const imagePreviewUrl = URL.createObjectURL(file);
 
     try {
-      const extracted = await recognizeImageQuestion(file);
+      const ocrResult = await recognizeImageQuestion(file);
 
-      const promptText = extracted && extracted.length > 5
-        ? `[Uploaded handwritten question from notebook - Photo: ${file.name}]
-Handwritten Question Extracted:
-"${extracted}"
+      let promptText = "";
 
-Please interpret and solve this handwritten question step-by-step with detailed explanation.`
-        : `[Uploaded study image/diagram: ${file.name}]
-I have uploaded an image of my handwritten notes/problem. Could you explain the key concepts and solve this problem?`;
+      if (ocrResult.isValid && ocrResult.text) {
+        // High confidence clean text extracted without noise
+        promptText = `📷 [Uploaded Handwritten Question: "${file.name}"]
+Extracted Problem:
+"${ocrResult.text}"
+
+Please interpret and solve this question step-by-step with clear formulas, working steps, and detailed explanation.`;
+      } else {
+        // Handwriting in photo is stylized/faint or contains notebook ruled lines
+        promptText = `📷 [Uploaded Notebook Study Photo: "${file.name}"]
+I have uploaded a photo of my handwritten notes / problem from my notebook. (The handwriting is stylized or written on notebook lines).
+
+Please warmly confirm you received my notebook photo, explain what topic or subject it looks like, and ask me which specific question number or equation you should solve step-by-step!`;
+
+        // Pre-fill input so user can quickly type question number/topic if they want
+        setInputMessage("Solve Question: ");
+      }
 
       // Reset file input
       if (fileInputRef.current) fileInputRef.current.value = "";
 
-      // Automatically send as query
-      handleSendMessage(promptText);
+      // Automatically send as query with image preview
+      handleSendMessage(promptText, imagePreviewUrl);
     } catch (err) {
       console.warn("Handwriting image analysis failed:", err);
-      handleSendMessage(`[Uploaded image: ${file.name}]
-Could you help me understand this problem?`);
+      handleSendMessage(
+        `📷 [Uploaded notebook photo: "${file.name}"]\nI have uploaded an image of my notebook notes/problem. Could you please guide me on this topic?`,
+        imagePreviewUrl
+      );
     } finally {
       setIsAnalyzingImage(false);
       setImageOcrStatus("");
@@ -195,13 +210,14 @@ Could you help me understand this problem?`);
     }
   };
 
-  const handleSendMessage = async (textToSend = null) => {
+  const handleSendMessage = async (textToSend = null, imagePreview = null) => {
     const text = (textToSend || inputMessage).trim();
     if (!text || isLoading) return;
 
     const userMsg = {
       role: "user",
       content: text,
+      imagePreview: imagePreview || null,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
@@ -343,6 +359,14 @@ Upload hote hi bolna *"bhai file samjha"* ya *"bhai pdf suna"* — main poora co
       4. 🎯 Exam / Viva / Interview Highlights.
       5. Conclude with a helpful check: "Bata isme se kaunsa topic ya section detail me samjhau? 😄"
   • NEVER claim you cannot read or don't have access to the file when study material context is provided.
+
+7. HANDWRITTEN NOTEBOOK PHOTOS & STUDY IMAGES:
+- When a student uploads a notebook photo or handwritten problem:
+  • If the question text is extracted: Solve the problem directly with step-by-step mathematical working, formulas, definitions, and the final answer.
+  • If the photo has faint or stylized handwriting:
+    - Warmly acknowledge the upload with friendly tutor enthusiasm: "Haan bhai! Teri notebook photo mujhe mil gayi hai! 📷 Notebook ki handwriting camera angle ya faint ink ki wajah se thodi stylized lag rahi hai."
+    - Invite them to give a quick 1-line clarification: "Tu bas ek baar chat mein bata de ki kaun sa question number ya formula solve karna hai (jaise Q1, integration, matrix, etc.) — main poora step-by-step solution abhi samjha deta hoon! 😄"
+    - NEVER produce random broken characters or complain. Always maintain an encouraging tutor tone.
 ${contextText ? `\n\n[Uploaded Study Material Context]:\n${contextText.slice(0, 12000)}` : ""}`;
 
       const conversationPayload = [
@@ -510,6 +534,11 @@ ${contextText ? `\n\n[Uploaded Study Material Context]:\n${contextText.slice(0, 
                   {msg.role === "user" ? (user?.name?.charAt(0).toUpperCase() || "U") : "🤖"}
                 </div>
                 <div className="message-bubble">
+                  {msg.imagePreview && (
+                    <div className="uploaded-image-preview-card">
+                      <img src={msg.imagePreview} alt="Uploaded notebook problem" className="uploaded-chat-image" />
+                    </div>
+                  )}
                   {msg.role === "assistant" ? (
                     <MarkdownRenderer content={msg.content} />
                   ) : (

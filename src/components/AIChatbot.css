@@ -442,3 +442,20 @@
     padding: 0 12px;
   }
 }
+
+.uploaded-image-preview-card {
+  margin-bottom: 10px;
+  border-radius: 12px;
+  overflow: hidden;
+  max-width: 320px;
+  border: 1.5px solid rgba(124, 58, 237, 0.2);
+  background: #f8fafc;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.uploaded-chat-image {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  display: block;
+}

@@ -1,6 +1,7 @@
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth/mammoth.browser";
 import { createWorker } from "tesseract.js";
+import { recognizeImageQuestion } from "./imageOcrHelper";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -147,20 +148,17 @@ export const extractTextFromFile = async (file, onProgress = null) => {
   if (IMAGE_EXTENSIONS.has(ext) || file.type?.startsWith("image/")) {
     if (onProgress) onProgress(`Running OCR recognition on image "${file.name}"...`);
     try {
-      const worker = await createWorker("eng");
-      const res = await worker.recognize(file);
-      await worker.terminate();
+      const ocrResult = await recognizeImageQuestion(file);
 
-      const ocrText = res?.data?.text?.trim() || "";
-      if (ocrText && ocrText.length > 5) {
-        return `[Uploaded Study Image / Diagram Notes: ${file.name}]\nExtracted Content:\n${ocrText}\n\nEDVIKO AI Tutor: Explain the concepts in this image, solve any problems, and provide a clear step-by-step breakdown.`;
+      if (ocrResult.isValid && ocrResult.text) {
+        return `[Uploaded Study Image / Diagram Notes: ${file.name}]\nExtracted Content:\n${ocrResult.text}\n\nEDVIKO AI Tutor: Explain the concepts in this image, solve any problems, and provide a clear step-by-step breakdown.`;
       }
     } catch (err) {
       console.warn("Image OCR error:", err);
     }
 
     const docTitle = file.name.replace(/\.[^/.]+$/, "");
-    return `[Uploaded Study Diagram / Concept Image: ${file.name}]\nImage uploaded by student for AI study assistance on "${docTitle}". Contains conceptual diagrams, lecture slides, or textbook illustrations. EDVIKO AI Tutor can explain the core concepts, definitions, and applications.`;
+    return `[Uploaded Study Diagram / Concept Image: ${file.name}]\nImage uploaded by student for AI study assistance on "${docTitle}". Contains conceptual diagrams, lecture slides, or notebook notes. EDVIKO AI Tutor can explain the core concepts, definitions, and applications.`;
   }
 
   // ==========================================
