@@ -17,6 +17,10 @@ const studentProfileSchema = new mongoose.Schema(
       type: String,
       default: "College / University",
     },
+    avatar: {
+      type: String,
+      default: "",
+    },
     bio: {
       type: String,
       default: "",

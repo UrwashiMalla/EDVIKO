@@ -753,8 +753,16 @@ function Navbar({ activeTab = "dashboard" }) {
             onClick={handleProfileClick}
             title={isTeacher ? "Click to view & edit Faculty Profile" : "View Student Profile"}
           >
-            <div className="profile-avatar">
-              {user?.name ? user.name.charAt(0).toUpperCase() : isTeacher ? "P" : "S"}
+            <div className="profile-avatar" style={{ overflow: "hidden", padding: 0 }}>
+              {user?.avatar ? (
+                <img
+                  src={user.avatar}
+                  alt={user.name || "Student"}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                />
+              ) : (
+                user?.name ? user.name.charAt(0).toUpperCase() : isTeacher ? "P" : "S"
+              )}
             </div>
             <div className="profile-text">
               <strong>{user?.name || (isTeacher ? "Professor" : "Student")}</strong>

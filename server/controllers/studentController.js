@@ -88,7 +88,7 @@ const getDashboardStats = async (req, res, next) => {
  */
 const updateProfile = async (req, res, next) => {
   try {
-    const { gradeOrClass, bio, teacherCode } = req.body;
+    const { name, gradeOrClass, bio, teacherCode, avatar } = req.body;
     let profile = await StudentProfile.findOne({ userId: req.user._id });
 
     if (!profile) {
@@ -97,6 +97,16 @@ const updateProfile = async (req, res, next) => {
 
     if (gradeOrClass !== undefined) profile.gradeOrClass = gradeOrClass;
     if (bio !== undefined) profile.bio = bio;
+    if (avatar !== undefined) profile.avatar = avatar;
+
+    // Update User name and avatar if provided
+    const userUpdates = {};
+    if (name && name.trim()) userUpdates.name = name.trim();
+    if (avatar !== undefined) userUpdates.avatar = avatar;
+
+    if (Object.keys(userUpdates).length > 0) {
+      await User.findByIdAndUpdate(req.user._id, userUpdates);
+    }
 
     if (teacherCode && teacherCode.trim()) {
       const teacher = await TeacherProfile.findOne({
@@ -110,6 +120,9 @@ const updateProfile = async (req, res, next) => {
     }
 
     await profile.save();
+
+    // Re-populate teacher info for frontend
+    await profile.populate("teacherId", "name email");
 
     res.json({
       success: true,

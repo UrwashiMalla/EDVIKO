@@ -41,6 +41,7 @@ const sendTokenResponse = (user, statusCode, res, message = "Success") => {
         name: user.name,
         email: user.email,
         role: user.role,
+        avatar: user.avatar || "",
         isVerified: user.isVerified,
       },
     });
@@ -562,6 +563,7 @@ const getMe = async (req, res, next) => {
         name: req.user.name,
         email: req.user.email,
         role: req.user.role,
+        avatar: req.user.avatar || (profile?.avatar || ""),
         isVerified: req.user.isVerified,
         createdAt: req.user.createdAt,
       },
