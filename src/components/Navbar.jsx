@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
-import { notificationApi } from "../services/api";
+import { notificationApi, teacherApi } from "../services/api";
 import {
   getInstitutionName,
   setInstitutionName,
@@ -30,6 +30,30 @@ function Navbar({ activeTab = "dashboard" }) {
   const [institution, setInstitutionState] = useState(getInstitutionName());
   const [copiedCode, setCopiedCode] = useState(false);
   const [saveToast, setSaveToast] = useState("");
+
+  // Removed students state
+  const [removedStudentsList, setRemovedStudentsList] = useState([]);
+
+  const fetchRemovedStudents = async () => {
+    if (!isTeacher) return;
+    try {
+      const res = await teacherApi.getRemovedStudents();
+      setRemovedStudentsList(res.removedStudents || []);
+    } catch (err) {
+      console.warn("Could not load removed students:", err);
+    }
+  };
+
+  const handleUnremoveStudent = async (studentId) => {
+    try {
+      await teacherApi.unremoveStudent(studentId);
+      setSaveToast("Student unremoved! They can now rejoin your classroom.");
+      fetchRemovedStudents();
+      setTimeout(() => setSaveToast(""), 3500);
+    } catch (err) {
+      setSaveToast("Error unremoving: " + err.message);
+    }
+  };
 
   // Unique Teacher Class Code
   const [classCode, setClassCode] = useState(() => {
@@ -176,6 +200,7 @@ function Navbar({ activeTab = "dashboard" }) {
       setTeacherName(user?.name || "Prof. Sarah Jenkins");
       setTeacherSubjectState(getTeacherSubject());
       setInstitutionState(getInstitutionName());
+      fetchRemovedStudents();
       setShowTeacherProfile(true);
     } else {
       navigate("/student/profile");
@@ -653,7 +678,7 @@ function Navbar({ activeTab = "dashboard" }) {
                   >
                     <div>
                       <div style={{ fontWeight: "800", fontSize: "14px" }}>
-                        🔔 Quiz Notifications {studentUnreadCount > 0 && `(${studentUnreadCount} new)`}
+                        🔔 Classroom Notifications {studentUnreadCount > 0 && `(${studentUnreadCount} new)`}
                       </div>
                       <small style={{ opacity: 0.85, fontSize: "11px" }}>
                         Preserved classroom updates
@@ -705,7 +730,7 @@ function Navbar({ activeTab = "dashboard" }) {
                         >
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                             <span style={{ fontSize: "12px", fontWeight: "800", color: "#7c3aed" }}>
-                              🎯 {n.title}
+                              {n.type === "announcement" ? "📢 " : n.type === "message" ? "💬 " : n.type === "note" ? "📚 " : n.type === "lecture" ? "🎥 " : n.type === "quiz" ? "🎯 " : "🔔 "}{n.title}
                             </span>
                             {!n.isRead && (
                               <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444" }} />
@@ -721,7 +746,7 @@ function Navbar({ activeTab = "dashboard" }) {
                             <button
                               onClick={() => {
                                 setShowStudentNotificationPopup(false);
-                                navigate(n.link || "/student/quizzes");
+                                navigate(n.link || "/student/dashboard");
                               }}
                               style={{
                                 background: "#ede9fe",
@@ -734,7 +759,7 @@ function Navbar({ activeTab = "dashboard" }) {
                                 cursor: "pointer",
                               }}
                             >
-                              Open Quiz →
+                              {n.type === "quiz" ? "Take Quiz →" : n.type === "note" ? "View Material →" : n.type === "message" ? "Reply →" : "View →"}
                             </button>
                           </div>
                         </div>
@@ -1135,6 +1160,68 @@ function Navbar({ activeTab = "dashboard" }) {
                 <small style={{ color: "#64748b", fontSize: "11px", display: "block", marginTop: "8px" }}>
                   Share this unique code with students so they can join your class during registration.
                 </small>
+              </div>
+
+                            {/* Removed Students Section */}
+              <div style={{ background: "#fef2f2", padding: "16px 18px", borderRadius: "14px", border: "1px solid #fecaca", marginBottom: "24px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px", color: "#991b1b" }}>
+                    🚫 REMOVED STUDENTS ({removedStudentsList.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={fetchRemovedStudents}
+                    style={{ background: "none", border: "none", color: "#b91c1c", fontSize: "11px", fontWeight: "700", cursor: "pointer" }}
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "#7f1d1d" }}>
+                  Students removed from your classroom cannot rejoin using your code until you unremove them here. Their historical learning records remain intact.
+                </p>
+                {removedStudentsList.length === 0 ? (
+                  <div style={{ fontSize: "12px", color: "#6b7280", fontStyle: "italic" }}>
+                    No students currently removed from your classroom.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "160px", overflowY: "auto" }}>
+                    {removedStudentsList.map((st) => (
+                      <div
+                        key={st.id}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "8px 12px",
+                          background: "#fff",
+                          borderRadius: "8px",
+                          border: "1px solid #fca5a5",
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: "13px", fontWeight: "700", color: "#1f2937" }}>{st.name || "Student"}</div>
+                          <div style={{ fontSize: "11px", color: "#6b7280" }}>{st.email} • Status: <span style={{ color: "#dc2626", fontWeight: "700" }}>Removed</span></div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleUnremoveStudent(st.id)}
+                          style={{
+                            padding: "5px 10px",
+                            background: "#dcfce7",
+                            color: "#166534",
+                            border: "1px solid #bbf7d0",
+                            borderRadius: "6px",
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            cursor: "pointer",
+                          }}
+                        >
+                          ↩ Unremove Student
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}

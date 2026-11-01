@@ -1,5 +1,5 @@
 /**
- * Centralized API Client for LERNIQ
+ * Centralized API Client for EDVIKO
  */
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
@@ -45,12 +45,26 @@ export const apiRequest = async (endpoint, options = {}) => {
 
 // API Endpoints
 export const authApi = {
+  // Student Auth
   sendSignupOtp: (body) => apiRequest("/api/auth/send-signup-otp", { method: "POST", body: JSON.stringify(body) }),
   verifySignupOtp: (body) => apiRequest("/api/auth/verify-signup-otp", { method: "POST", body: JSON.stringify(body) }),
+  sendStudentOtp: (body) => apiRequest("/api/auth/student/send-otp", { method: "POST", body: JSON.stringify(body) }),
+  verifyStudentOtp: (body) => apiRequest("/api/auth/student/verify-otp", { method: "POST", body: JSON.stringify(body) }),
   registerStudent: (body) => apiRequest("/api/auth/student/register", { method: "POST", body: JSON.stringify(body) }),
   loginStudent: (body) => apiRequest("/api/auth/student/login", { method: "POST", body: JSON.stringify(body) }),
+
+  // Teacher Auth
+  sendTeacherOtp: (body) => apiRequest("/api/auth/teacher/send-otp", { method: "POST", body: JSON.stringify(body) }),
+  verifyTeacherOtp: (body) => apiRequest("/api/auth/teacher/verify-otp", { method: "POST", body: JSON.stringify(body) }),
+  registerTeacher: (body) => apiRequest("/api/auth/teacher/register", { method: "POST", body: JSON.stringify(body) }),
   loginTeacher: (body) => apiRequest("/api/auth/teacher/login", { method: "POST", body: JSON.stringify(body) }),
-  verifyOtp: (body) => apiRequest("/api/auth/verify-otp", { method: "POST", body: JSON.stringify(body) }),
+
+  // Forgot Password
+  sendForgotPasswordOtp: (body) => apiRequest("/api/auth/forgot-password/send-otp", { method: "POST", body: JSON.stringify(body) }),
+  verifyForgotPasswordOtp: (body) => apiRequest("/api/auth/forgot-password/verify-otp", { method: "POST", body: JSON.stringify(body) }),
+  resetPassword: (body) => apiRequest("/api/auth/forgot-password/reset", { method: "POST", body: JSON.stringify(body) }),
+
+  // General & Utility
   resendOtp: (body) => apiRequest("/api/auth/resend-otp", { method: "POST", body: JSON.stringify(body) }),
   getMe: () => apiRequest("/api/auth/me"),
   logout: () => apiRequest("/api/auth/logout", { method: "POST" }),
@@ -96,6 +110,7 @@ export const notificationApi = {
 export const studentApi = {
   getDashboard: () => apiRequest("/api/students/me/dashboard"),
   updateProfile: (body) => apiRequest("/api/students/me/profile", { method: "PUT", body: JSON.stringify(body) }),
+  changeClassroom: (body) => apiRequest("/api/students/classroom/change", { method: "POST", body: JSON.stringify(body) }),
   getBroadcasts: () => apiRequest("/api/students/messages/broadcasts"),
   getDirectMessages: () => apiRequest("/api/students/messages/direct"),
   sendDirectMessage: (body) => apiRequest("/api/students/messages/direct", { method: "POST", body: JSON.stringify(body) }),
@@ -104,13 +119,16 @@ export const studentApi = {
 export const teacherApi = {
   getDashboard: () => apiRequest("/api/teachers/dashboard"),
   getStudents: () => apiRequest("/api/teachers/students"),
+  getRemovedStudents: () => apiRequest("/api/teachers/students/removed"),
   getStudentDetails: (studentId) => apiRequest(`/api/teachers/students/${studentId}`),
   getStudentQuizResults: (studentId) => apiRequest(`/api/teachers/students/${studentId}/quiz-results`),
   getDocuments: () => apiRequest("/api/teachers/documents"),
   getQuizResults: () => apiRequest("/api/teachers/quiz-results"),
   removeStudent: (studentId) => apiRequest(`/api/teachers/students/${studentId}`, { method: "DELETE" }),
+  unremoveStudent: (studentId) => apiRequest(`/api/teachers/students/${studentId}/unremove`, { method: "POST" }),
   sendBroadcast: (body) => apiRequest("/api/teachers/broadcast", { method: "POST", body: JSON.stringify(body) }),
   getBroadcasts: () => apiRequest("/api/teachers/broadcasts"),
+  getConversations: () => apiRequest("/api/teachers/conversations"),
   sendDirectMessage: (studentId, body) => apiRequest(`/api/teachers/students/${studentId}/message`, { method: "POST", body: JSON.stringify(body) }),
   getDirectMessages: (studentId) => apiRequest(`/api/teachers/students/${studentId}/messages`),
 };

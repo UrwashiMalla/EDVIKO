@@ -12,10 +12,19 @@ const otpSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  purpose: {
+    type: String,
+    enum: ["student_verification", "teacher_verification", "password_reset"],
+    default: "student_verification",
+  },
+  verified: {
+    type: Boolean,
+    default: false,
+  },
   expiresAt: {
     type: Date,
     required: true,
-    index: { expires: "10m" }, // automatically delete after 10 minutes
+    index: { expires: "15m" }, // automatically delete after 15 minutes
   },
 });
 

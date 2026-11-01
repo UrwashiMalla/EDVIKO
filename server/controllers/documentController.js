@@ -4,6 +4,8 @@ const Quiz = require("../models/Quiz");
 const QuizAttempt = require("../models/QuizAttempt");
 const TutorChat = require("../models/TutorChat");
 const StudentProfile = require("../models/StudentProfile");
+const TeacherProfile = require("../models/TeacherProfile");
+const Notification = require("../models/Notification");
 const { validateDocumentContent, getStats } = require("../services/documentService");
 const { getValidLanguage } = require("../utils/languageHelper");
 
@@ -51,6 +53,39 @@ const createDocument = async (req, res, next) => {
       characterCount: stats.characterCount,
       processingStatus: "ready",
     });
+
+    // If uploaded by teacher, notify all enrolled students
+    if (isTeacher) {
+      try {
+        const teacherProfile = await TeacherProfile.findOne({ userId: req.user._id });
+        if (teacherProfile) {
+          const removedIds = (teacherProfile.removedStudents || [])
+            .filter((r) => r.studentId)
+            .map((r) => r.studentId.toString());
+
+          const activeStudentIds = (teacherProfile.students || [])
+            .map((id) => id.toString())
+            .filter((id) => !removedIds.includes(id));
+
+          if (activeStudentIds.length > 0) {
+            const notifications = activeStudentIds.map((sId) => ({
+              recipientId: sId,
+              senderId: req.user._id,
+              senderName: req.user.name || "Faculty Member",
+              classroomCode: teacherProfile.teacherCode,
+              type: "note",
+              title: `📚 New Faculty Study Material: ${docTitle}`,
+              message: `Your instructor shared "${docTitle}". You can now review it in your Study Documents or practice with AI Tutor!`,
+              link: "/student/documents",
+              isRead: false,
+            }));
+            await Notification.insertMany(notifications);
+          }
+        }
+      } catch (notifErr) {
+        console.warn("Faculty document notification warning:", notifErr.message);
+      }
+    }
 
     res.status(201).json({
       success: true,

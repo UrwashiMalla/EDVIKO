@@ -74,15 +74,28 @@ function TeacherStudents() {
       console.warn("Backend remove student:", err.message);
     }
 
-    showToast(`Permanently removed "${studentToRemove.name}". They cannot log in again with ${studentToRemove.email}.`);
+    showToast(`Removed "${studentToRemove.name}" from your classroom. They cannot rejoin using your code until unremoved.`);
     setStudentToRemove(null);
+    try {
+      const res = await teacherApi.getStudents();
+      setStudents(res.students || []);
+    } catch {}
   };
 
-  const handleRestoreStudent = (studentId) => {
+  const handleRestoreStudent = async (studentId) => {
+    try {
+      await teacherApi.unremoveStudent(studentId);
+    } catch (err) {
+      console.warn("Backend unremove student:", err.message);
+    }
     const updated = restoreRemovedStudentId(studentId);
     setRemovedIds(updated);
     const restored = allKnownStudents.find((s) => String(s.id) === String(studentId));
-    showToast(`Restored "${restored ? restored.name : "Student"}" back to roster!`);
+    showToast(`Unremoved "${restored ? restored.name : "Student"}"! They can now rejoin your classroom.`);
+    try {
+      const res = await teacherApi.getStudents();
+      setStudents(res.students || []);
+    } catch {}
   };
 
   const handleRestoreAll = () => {

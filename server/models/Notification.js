@@ -24,8 +24,8 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["quiz", "announcement", "reminder", "general", "message"],
-      default: "quiz",
+      enum: ["quiz", "announcement", "reminder", "general", "message", "lecture", "note"],
+      default: "general",
     },
     title: {
       type: String,
@@ -37,7 +37,7 @@ const notificationSchema = new mongoose.Schema(
     },
     link: {
       type: String,
-      default: "/student/quizzes",
+      default: "/student/dashboard",
     },
     quizId: {
       type: mongoose.Schema.Types.ObjectId,

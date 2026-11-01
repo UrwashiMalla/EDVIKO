@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "../context/useAuth";
-import { studentApi } from "../services/api";
+import { studentApi, authApi } from "../services/api";
 import { getInstitutionName } from "../services/frontendStorage";
 import Navbar from "./Navbar";
 import "./StudentProfile.css";
 
 function StudentProfile() {
-  const { user, updateUser, refreshUser } = useAuth();
+  const { user, updateUser } = useAuth();
   const fileInputRef = useRef(null);
 
   // Profile data states
@@ -16,13 +16,18 @@ function StudentProfile() {
   const [avatar, setAvatar] = useState(user?.avatar || "");
   const [teacherCode, setTeacherCode] = useState("");
   const [teacherInfo, setTeacherInfo] = useState(null);
-  const [institutionName, setInstitutionName] = useState(getInstitutionName());
+  const [activeTeacherProfile, setActiveTeacherProfile] = useState(null);
+  const [classroomHistory, setClassroomHistory] = useState([]);
+  const [availableTeachers, setAvailableTeachers] = useState([]);
+  const [institutionName, setInstitutionName] = useState(getInstitutionName() || "University / College");
 
   // UI interaction states
   const [isEditing, setIsEditing] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [changingClassroom, setChangingClassroom] = useState(false);
+  const [newTeacherCode, setNewTeacherCode] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -33,48 +38,59 @@ function StudentProfile() {
   }, [user]);
 
   // Load existing profile details from backend
-  useEffect(() => {
-    let ignore = false;
-    const fetchProfile = async () => {
-      try {
-        const res = await studentApi.getDashboard();
-        if (!ignore && res.profile) {
-          setGradeOrClass(res.profile.gradeOrClass || "College / University");
-          if (res.profile.avatar && !avatar) {
-            setAvatar(res.profile.avatar);
-          }
-          if (res.profile.teacherId) {
-            setTeacherInfo(res.profile.teacherId);
-          }
+  const fetchProfile = async () => {
+    try {
+      const [dashRes, teachRes] = await Promise.all([
+        studentApi.getDashboard(),
+        authApi.listTeachers().catch(() => ({ teachers: [] })),
+      ]);
+
+      if (dashRes.profile) {
+        setGradeOrClass(dashRes.profile.gradeOrClass || "College / University");
+        if (dashRes.profile.avatar && !avatar) {
+          setAvatar(dashRes.profile.avatar);
         }
-      } catch (err) {
-        console.warn("Failed to load profile details:", err.message);
-      } finally {
-        if (!ignore) setLoading(false);
+        if (dashRes.profile.teacherId) {
+          setTeacherInfo(dashRes.profile.teacherId);
+        }
+        if (dashRes.profile.classroomHistory) {
+          setClassroomHistory(dashRes.profile.classroomHistory);
+        }
       }
-    };
 
+      if (dashRes.activeTeacherProfile) {
+        setActiveTeacherProfile(dashRes.activeTeacherProfile);
+        if (dashRes.activeTeacherProfile.universityOrCollege) {
+          setInstitutionName(dashRes.activeTeacherProfile.universityOrCollege);
+        }
+      }
+
+      if (teachRes.teachers) {
+        setAvailableTeachers(teachRes.teachers);
+      }
+    } catch (err) {
+      console.warn("Failed to load profile details:", err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchProfile();
-    setInstitutionName(getInstitutionName());
-
-    return () => {
-      ignore = true;
-    };
+    const inst = getInstitutionName();
+    if (inst) setInstitutionName(inst);
   }, []);
 
   // Calculate profile completion based strictly on existing required profile fields
   const completionItems = [
     { label: "Student Full Name", done: Boolean(studentName && studentName.trim()) },
     { label: "Email Address", done: Boolean(user?.email) },
-    { label: "Email Verification", done: Boolean(user?.isVerified) },
     { label: "Academic Level / Course", done: Boolean(gradeOrClass && gradeOrClass.trim()) },
     { label: "Profile Picture", done: Boolean(avatar) },
-    { label: "Faculty Mentor", done: Boolean(teacherInfo) },
+    { label: "Faculty Mentor / Classroom", done: Boolean(teacherInfo) },
   ];
   const completedCount = completionItems.filter((i) => i.done).length;
   const completionPercentage = Math.round((completedCount / completionItems.length) * 100);
-
-  // Missing field hints
   const missingFields = completionItems.filter((i) => !i.done).map((i) => i.label);
 
   // ==========================================
@@ -98,7 +114,6 @@ function StudentProfile() {
       const img = new Image();
       img.onload = async () => {
         try {
-          // Normalize and resize to max 360x360 px for fast loading and crisp resolution
           const canvas = document.createElement("canvas");
           const maxDim = 360;
           let width = img.width;
@@ -122,12 +137,10 @@ function StudentProfile() {
 
           setAvatar(base64Avatar);
 
-          // Update frontend context and localStorage immediately
           if (updateUser) {
             updateUser({ avatar: base64Avatar });
           }
 
-          // Persist to backend database
           await studentApi.updateProfile({ avatar: base64Avatar });
 
           setMessage("Profile picture updated successfully!");
@@ -139,13 +152,39 @@ function StudentProfile() {
           if (fileInputRef.current) fileInputRef.current.value = "";
         }
       };
+      img.onerror = () => {
+        setError("Failed to process image file. Please try another image.");
+        setIsUploadingAvatar(false);
+      };
       img.src = event.target.result;
+    };
+    reader.onerror = () => {
+      setError("Failed to read image file.");
+      setIsUploadingAvatar(false);
     };
     reader.readAsDataURL(file);
   };
 
+  const handleRemoveAvatar = async () => {
+    try {
+      setIsUploadingAvatar(true);
+      setError("");
+      setAvatar("");
+      if (updateUser) {
+        updateUser({ avatar: "" });
+      }
+      await studentApi.updateProfile({ avatar: "" });
+      setMessage("Profile picture removed.");
+      setTimeout(() => setMessage(""), 4000);
+    } catch (err) {
+      setError("Failed to remove avatar: " + err.message);
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
   // ==========================================
-  // SAVE PROFILE CHANGES
+  // SAVE PROFILE DETAILS
   // ==========================================
   const handleSave = async (e) => {
     e.preventDefault();
@@ -154,18 +193,32 @@ function StudentProfile() {
     setError("");
 
     try {
-      // 1. Update student name in auth state & local cache
       if (studentName.trim() && updateUser) {
         updateUser({ name: studentName.trim() });
       }
 
-      // 2. Call backend profile update
       const res = await studentApi.updateProfile({
         name: studentName.trim(),
         gradeOrClass: gradeOrClass.trim(),
-        teacherCode: teacherCode.trim() || undefined,
         avatar,
       });
+
+      // If user also provided teacherCode in edit form
+      if (teacherCode && teacherCode.trim()) {
+        try {
+          const switchRes = await studentApi.changeClassroom({ teacherCode: teacherCode.trim() });
+          if (switchRes.profile) {
+            setTeacherInfo(switchRes.profile.teacherId);
+            if (switchRes.profile.classroomHistory) {
+              setClassroomHistory(switchRes.profile.classroomHistory);
+            }
+          }
+        } catch (switchErr) {
+          setError("Profile saved, but teacher code update failed: " + switchErr.message);
+          setSaving(false);
+          return;
+        }
+      }
 
       setMessage("Profile changes saved successfully!");
       if (res.profile?.teacherId) {
@@ -173,12 +226,7 @@ function StudentProfile() {
       }
       setTeacherCode("");
       setIsEditing(false);
-
-      if (refreshUser) {
-        await refreshUser();
-      }
-
-      setTimeout(() => setMessage(""), 5000);
+      setTimeout(() => setMessage(""), 4000);
     } catch (err) {
       setError(err.message || "Failed to update profile. Please try again.");
     } finally {
@@ -186,196 +234,255 @@ function StudentProfile() {
     }
   };
 
+  // ==========================================
+  // CHANGE CLASSROOM / TEACHER
+  // ==========================================
+  const handleChangeClassroom = async (e) => {
+    e.preventDefault();
+    if (!newTeacherCode.trim()) {
+      setError("Please enter or select a valid classroom code.");
+      return;
+    }
+
+    setChangingClassroom(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const res = await studentApi.changeClassroom({ teacherCode: newTeacherCode.trim() });
+      setMessage(res.message || "Successfully joined new classroom!");
+      if (res.profile) {
+        setTeacherInfo(res.profile.teacherId);
+        if (res.profile.classroomHistory) {
+          setClassroomHistory(res.profile.classroomHistory);
+        }
+      }
+      setNewTeacherCode("");
+      setTimeout(() => setMessage(""), 5000);
+    } catch (err) {
+      setError(err.message || "Failed to switch classroom.");
+    } finally {
+      setChangingClassroom(false);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="student-profile-container">
-        <Navbar activeTab="profile" />
-        <div style={{ textAlign: "center", padding: "100px 0", color: "#7c3aed", fontWeight: "700" }}>
-          ⏳ Loading student profile...
-        </div>
+      <div className="student-profile-page">
+        <Navbar />
+        <main className="profile-container">
+          <div className="profile-loading-state">
+            <div className="spinner"></div>
+            <p>Loading your profile...</p>
+          </div>
+        </main>
       </div>
     );
   }
 
-  const initialLetter = studentName ? studentName.trim().charAt(0).toUpperCase() : (user?.name?.charAt(0).toUpperCase() || "S");
-
   return (
-    <div className="student-profile-container">
-      <Navbar activeTab="profile" />
+    <div className="student-profile-page">
+      <Navbar />
 
-      <main className="profile-main-content">
-        {/* Page Header */}
-        <div className="profile-page-header">
-          <h1>Student Profile</h1>
-          <p>Manage your student credentials, learning details, and faculty mentor connection.</p>
-        </div>
-
-        {/* Success Alert */}
+      <main className="profile-container">
+        {/* Alerts / Feedback */}
         {message && (
           <motion.div
-            className="profile-alert profile-alert-success"
+            className="profile-alert success"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <span>✅ {message}</span>
-            <button className="alert-dismiss-btn" onClick={() => setMessage("")}>✕</button>
+            <span>✅</span>
+            <span>{message}</span>
           </motion.div>
         )}
 
-        {/* Error Alert */}
         {error && (
           <motion.div
-            className="profile-alert profile-alert-error"
+            className="profile-alert error"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <span>⚠️ {error}</span>
-            <button className="alert-dismiss-btn" onClick={() => setError("")}>✕</button>
+            <span>⚠️</span>
+            <span>{error}</span>
           </motion.div>
         )}
 
-        {/* =========================================================
-            1. HERO CARD (Avatar + Name + Status + Edit Action)
-        ========================================================== */}
+        {/* TOP HERO PROFILE CARD */}
         <motion.div
           className="profile-hero-card"
-          initial={{ opacity: 0, y: 15 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
         >
           <div className="hero-left">
-            {/* Circular Profile Avatar with Camera Button */}
-            <div className="profile-avatar-wrapper">
-              <div className="profile-avatar-circle">
-                {avatar ? (
-                  <img src={avatar} alt={studentName} className="profile-avatar-img" />
-                ) : (
-                  <div className="profile-avatar-fallback">{initialLetter}</div>
-                )}
-                {isUploadingAvatar && (
-                  <div className="profile-avatar-spinner">⏳</div>
-                )}
-              </div>
+            {/* AVATAR WRAPPER */}
+            <div className="avatar-wrapper">
+              {avatar ? (
+                <img src={avatar} alt={studentName} className="avatar-img" />
+              ) : (
+                <div className="avatar-placeholder">
+                  <span>{(studentName || user?.name || "S").charAt(0).toUpperCase()}</span>
+                </div>
+              )}
 
-              {/* Camera Upload Button */}
-              <label
-                className="profile-avatar-camera-btn"
-                title="Click to upload or change profile photo"
+              {/* CAMERA OVERLAY BUTTON */}
+              <button
+                type="button"
+                className="avatar-upload-badge"
+                title="Upload profile picture"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploadingAvatar}
               >
-                <span className="camera-icon">📷</span>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/*"
-                  onChange={handleAvatarFileChange}
-                  disabled={isUploadingAvatar}
-                  style={{ display: "none" }}
-                />
-              </label>
+                {isUploadingAvatar ? "⏳" : "📷"}
+              </button>
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: "none" }}
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleAvatarFileChange}
+              />
             </div>
 
-            {/* Student Name & Email Details */}
-            <div className="hero-details">
-              <h2>{studentName || user?.name || "Student"}</h2>
-              <div className="hero-email">
-                <span>{user?.email}</span>
-                <span className={`verification-pill ${user?.isVerified ? "verified" : "unverified"}`}>
-                  {user?.isVerified ? "✓ Verified" : "⚠️ Unverified"}
-                </span>
+            {/* IDENTITY & ROLES */}
+            <div className="identity-block">
+              <div className="identity-badges">
+                <span className="role-tag student">STUDENT</span>
+                <span className="institution-tag">🏛️ {institutionName}</span>
               </div>
-              <div className="hero-badges">
-                <span className="role-badge">🎓 Student Account</span>
-                {gradeOrClass && (
-                  <span style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>
-                    • {gradeOrClass}
-                  </span>
-                )}
-              </div>
+              <h1 className="student-display-name">{studentName || "Student"}</h1>
+              <p className="student-username">
+                @{user?.username || (user?.email ? user.email.split("@")[0] : "student")}
+              </p>
+              {avatar && (
+                <button
+                  type="button"
+                  className="remove-avatar-btn"
+                  onClick={handleRemoveAvatar}
+                  disabled={isUploadingAvatar}
+                >
+                  Remove photo
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Edit Profile Action Toggle */}
-          <button
-            type="button"
-            className={`edit-profile-toggle-btn ${isEditing ? "active" : ""}`}
-            onClick={() => {
-              setIsEditing(!isEditing);
-              setError("");
-            }}
-          >
-            <span>{isEditing ? "✕ Cancel Editing" : "✎ Edit Profile"}</span>
-          </button>
+          {/* TOP RIGHT: EDIT TOGGLE BUTTON */}
+          <div className="hero-right">
+            {!isEditing ? (
+              <button
+                type="button"
+                className="edit-profile-btn"
+                onClick={() => {
+                  setIsEditing(true);
+                  setMessage("");
+                  setError("");
+                }}
+              >
+                <span>✏️</span>
+                <span>Edit Profile</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="cancel-edit-btn"
+                onClick={() => {
+                  setIsEditing(false);
+                  setError("");
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </motion.div>
 
-        {/* =========================================================
-            2. PROFILE COMPLETION INDICATOR
-        ========================================================== */}
-        <div className="profile-completion-card">
-          <div className="completion-header">
-            <span className="completion-title">
-              <span>🎯</span>
-              <span>Profile Strength & Completion</span>
-            </span>
-            <span className="completion-pct">{completionPercentage}%</span>
-          </div>
-
-          <div className="completion-bar-track">
-            <div
-              className="completion-bar-fill"
-              style={{ width: `${completionPercentage}%` }}
-            ></div>
-          </div>
-
-          <p className="completion-tip">
-            {completionPercentage === 100 ? (
-              <span>✨ Excellent! All core profile information is complete.</span>
-            ) : (
-              <span>
-                💡 Suggestion: Complete <strong>{missingFields.slice(0, 2).join(", ")}</strong> to reach 100%.
-              </span>
-            )}
-          </p>
-        </div>
-
-        {/* =========================================================
-            3. PROFILE DETAILS CARD (View Mode vs Edit Mode)
-        ========================================================== */}
+        {/* PROFILE COMPLETION PROGRESS CARD */}
         <motion.div
-          className="profile-details-card"
+          className="completion-card"
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
         >
-          <div className="details-card-header">
-            <h3>{isEditing ? "Edit Student Details" : "Academic & Profile Information"}</h3>
-            {!isEditing && (
-              <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>
-                Click "Edit Profile" above to make changes
-              </span>
-            )}
+          <div className="completion-header">
+            <div>
+              <h3>Profile Completion</h3>
+              <p>Keep your student details accurate for personalized AI summaries and faculty evaluations.</p>
+            </div>
+            <div className="completion-badge">
+              <strong>{completionPercentage}%</strong>
+            </div>
           </div>
 
-          {/* VIEW MODE: Structured Tiles */}
+          <div className="progress-track-bg">
+            <motion.div
+              className="progress-fill"
+              initial={{ width: 0 }}
+              animate={{ width: `${completionPercentage}%` }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+            />
+          </div>
+
+          {missingFields.length > 0 ? (
+            <div className="missing-items-hint">
+              <span className="hint-icon">💡</span>
+              <span>Complete for 100%: </span>
+              <strong>{missingFields.join(" • ")}</strong>
+            </div>
+          ) : (
+            <div className="missing-items-hint complete">
+              <span className="hint-icon">🎉</span>
+              <span>All essential profile information is complete!</span>
+            </div>
+          )}
+        </motion.div>
+
+        {/* MAIN PROFILE DETAILS CARD */}
+        <motion.div
+          className="profile-details-card"
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
+        >
+          <div className="section-title-row">
+            <h2>Academic & Account Information</h2>
+            <span className="section-subtitle">
+              {isEditing ? "Modify your profile settings below" : "View your official enrolled details"}
+            </span>
+          </div>
+
           {!isEditing ? (
             <div className="details-grid">
               {/* Full Name */}
               <div className="detail-tile">
                 <div className="tile-label">
                   <span>👤</span>
-                  <span>Student Full Name</span>
+                  <span>Full Name</span>
                 </div>
                 <div className="tile-value">{studentName || "Not set"}</div>
-                <div className="tile-subtext">Displayed across your dashboard and quizzes</div>
+                <div className="tile-subtext">Displayed across your tests, certificates, and chat.</div>
               </div>
 
-              {/* Email Address */}
+              {/* Username */}
+              <div className="detail-tile">
+                <div className="tile-label">
+                  <span>🆔</span>
+                  <span>Username</span>
+                </div>
+                <div className="tile-value">{user?.username || user?.name || "Student"}</div>
+                <div className="tile-subtext">Used to sign in directly to your EDVIKO account.</div>
+              </div>
+
+              {/* Email */}
               <div className="detail-tile">
                 <div className="tile-label">
                   <span>✉️</span>
                   <span>Email Address</span>
                 </div>
-                <div className="tile-value">{user?.email || "Not set"}</div>
-                <div className="tile-subtext">Primary contact and login identifier</div>
+                <div className="tile-value">{user?.email || "No email"}</div>
+                <div className="tile-subtext">Associated with your account and activity records.</div>
               </div>
 
               {/* Academic Level */}
@@ -385,25 +492,14 @@ function StudentProfile() {
                   <span>Academic Level / Course</span>
                 </div>
                 <div className="tile-value">{gradeOrClass || "College / University"}</div>
-                <div className="tile-subtext">Customizes your AI tutor explanations</div>
+                <div className="tile-subtext">Guides the EDVIKO AI tutor's conceptual explanations.</div>
               </div>
 
-              {/* Affiliated Institution (Locked) */}
-              <div className="detail-tile institution-tile">
-                <div className="tile-label">
-                  <span>🏛️</span>
-                  <span>Affiliated Institution</span>
-                  <span className="lock-badge">🔒 Read-Only</span>
-                </div>
-                <div className="tile-value">{institutionName}</div>
-                <div className="tile-subtext">Configured by your faculty mentor</div>
-              </div>
-
-              {/* Assigned Faculty Mentor */}
-              <div className="detail-tile full-width">
+              {/* Connected Faculty Mentor */}
+              <div className="detail-tile full-width mentor-tile">
                 <div className="tile-label">
                   <span>👨‍🏫</span>
-                  <span>Assigned Faculty Mentor</span>
+                  <span>Assigned Faculty / Mentor</span>
                 </div>
                 {teacherInfo ? (
                   <div>
@@ -414,7 +510,7 @@ function StudentProfile() {
                       </span>
                     </div>
                     <div className="tile-subtext" style={{ marginTop: "6px" }}>
-                      Connected mentor for notes, quizzes, and academic evaluations.
+                      Classroom Code: <strong>{activeTeacherProfile?.teacherCode || "TEACH-101"}</strong> • Connected mentor for notes, quizzes, and academic evaluations.
                     </div>
                   </div>
                 ) : (
@@ -423,16 +519,14 @@ function StudentProfile() {
                       No faculty mentor linked yet.
                     </div>
                     <div className="tile-subtext">
-                      Click "Edit Profile" to enter your teacher's code (e.g. TEACH-101).
+                      Click "Edit Profile" or use the classroom switcher below to connect with an instructor.
                     </div>
                   </div>
                 )}
               </div>
             </div>
           ) : (
-            /* EDIT MODE: Form Inputs */
             <form onSubmit={handleSave} className="profile-edit-form">
-              {/* Full Name */}
               <div className="form-group">
                 <label>Student Full Name <span>*</span></label>
                 <input
@@ -445,7 +539,6 @@ function StudentProfile() {
                 <small>You can change your displayed student name anytime.</small>
               </div>
 
-              {/* Academic Level */}
               <div className="form-group">
                 <label>Academic Level / Course</label>
                 <input
@@ -457,20 +550,6 @@ function StudentProfile() {
                 <small>Helps the EDVIKO AI Tutor tune explanations to your level.</small>
               </div>
 
-              {/* Affiliated Institution (Read-Only) */}
-              <div className="detail-tile institution-tile" style={{ margin: "4px 0" }}>
-                <div className="tile-label">
-                  <span>🏛️</span>
-                  <span>Affiliated Institution</span>
-                  <span className="lock-badge">🔒 Set by Faculty Mentor (Read-Only)</span>
-                </div>
-                <div className="tile-value">{institutionName}</div>
-                <div className="tile-subtext">
-                  Your university/college affiliation is managed by your faculty supervisor.
-                </div>
-              </div>
-
-              {/* Mentor Code Box */}
               <div className="mentor-edit-box">
                 <div className="tile-label" style={{ color: "#4c1d95", marginBottom: "8px" }}>
                   <span>👨‍🏫</span>
@@ -488,7 +567,7 @@ function StudentProfile() {
 
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label style={{ fontSize: "12px", color: "#475569" }}>
-                    Join or Change Teacher Code (e.g. TEACH-101)
+                    Change Teacher Code (e.g. TEACH-101)
                   </label>
                   <input
                     type="text"
@@ -500,7 +579,6 @@ function StudentProfile() {
                 </div>
               </div>
 
-              {/* Form Action Buttons */}
               <div className="form-actions">
                 <button
                   type="button"
@@ -523,6 +601,132 @@ function StudentProfile() {
               </div>
             </form>
           )}
+        </motion.div>
+
+        {/* CHANGE CLASSROOM & CLASSROOM HISTORY SECTION */}
+        <motion.div
+          className="profile-details-card"
+          style={{ marginTop: "24px" }}
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+        >
+          <div className="section-title-row">
+            <h2>🏫 Classroom Management</h2>
+            <span className="section-subtitle">
+              Switch your teacher or classroom anytime. All previous quiz scores and study materials remain safely preserved.
+            </span>
+          </div>
+
+          <form onSubmit={handleChangeClassroom} style={{ marginTop: "16px" }}>
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div style={{ flex: 1, minWidth: "220px" }}>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
+                  Enter New Classroom Code
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. TEACH-101 or EDV-XXXX"
+                  value={newTeacherCode}
+                  onChange={(e) => setNewTeacherCode(e.target.value.toUpperCase())}
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    border: "1px solid #d1d5db",
+                    fontSize: "14px",
+                    outline: "none",
+                  }}
+                />
+              </div>
+
+              {availableTeachers.length > 0 && (
+                <div style={{ flex: 1, minWidth: "220px" }}>
+                  <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
+                    Or Pick Available Faculty
+                  </label>
+                  <select
+                    onChange={(e) => setNewTeacherCode(e.target.value)}
+                    value={newTeacherCode}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      border: "1px solid #d1d5db",
+                      fontSize: "14px",
+                      background: "#fff",
+                      outline: "none",
+                    }}
+                  >
+                    <option value="">-- Select Instructor --</option>
+                    {availableTeachers.map((t) => (
+                      <option key={t.teacherCode} value={t.teacherCode}>
+                        {t.name} ({t.teacherCode} - {t.department})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={changingClassroom || !newTeacherCode.trim()}
+                style={{
+                  padding: "10px 22px",
+                  borderRadius: "10px",
+                  background: "linear-gradient(135deg, #7044e5, #4f46e5)",
+                  color: "#fff",
+                  fontWeight: 600,
+                  fontSize: "14px",
+                  border: "none",
+                  cursor: "pointer",
+                  height: "42px",
+                  opacity: changingClassroom || !newTeacherCode.trim() ? 0.6 : 1,
+                }}
+              >
+                {changingClassroom ? "Connecting..." : "Switch Classroom →"}
+              </button>
+            </div>
+          </form>
+
+          {/* Classroom History Timeline */}
+          <div style={{ marginTop: "28px" }}>
+            <h3 style={{ fontSize: "16px", fontWeight: 700, color: "#1e1b4b", marginBottom: "12px" }}>
+              Classroom & Teacher History
+            </h3>
+            {classroomHistory && classroomHistory.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {classroomHistory.map((item, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "12px 18px",
+                      borderRadius: "12px",
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                      fontSize: "13px",
+                    }}
+                  >
+                    <div>
+                      <strong style={{ color: "#1e293b" }}>{item.teacherName || "Faculty Instructor"}</strong>
+                      <span style={{ color: "#64748b", marginLeft: "8px" }}>Code: {item.teacherCode}</span>
+                    </div>
+                    <div style={{ color: "#64748b" }}>
+                      Joined: {new Date(item.joinedAt).toLocaleDateString()}
+                      {item.leftAt ? ` • Departed: ${new Date(item.leftAt).toLocaleDateString()}` : " (Active)"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: "13px", color: "#64748b" }}>
+                No previous classrooms on record.
+              </p>
+            )}
+          </div>
         </motion.div>
       </main>
     </div>

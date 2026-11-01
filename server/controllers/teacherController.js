@@ -9,34 +9,21 @@ const Message = require("../models/Message");
 const Notification = require("../models/Notification");
 
 /**
- * Helper to fetch assigned student IDs for this teacher
+ * Helper to fetch assigned active student IDs for this teacher
  */
 const getAssignedStudentIds = async (teacherUserId) => {
   const teacherProfile = await TeacherProfile.findOne({ userId: teacherUserId });
-  const profiles = await StudentProfile.find({ teacherId: teacherUserId });
-  const idsFromProfiles = profiles.filter((p) => p.userId).map((p) => p.userId);
-  const idsFromTeacher = teacherProfile && teacherProfile.students ? teacherProfile.students : [];
+  if (!teacherProfile) return [];
 
-  // Also include any registered students belonging to this teacher or unassigned students
-  const otherTeacherProfiles = await TeacherProfile.find({ userId: { $ne: teacherUserId } });
-  const otherTeacherUserIds = otherTeacherProfiles.map((tp) => tp.userId);
-  const otherStudentProfiles = await StudentProfile.find({ teacherId: { $in: otherTeacherUserIds } });
-  const otherStudentUserIds = new Set(otherStudentProfiles.map((sp) => String(sp.userId)));
+  const removedIds = (teacherProfile.removedStudents || [])
+    .filter((r) => r.studentId)
+    .map((r) => r.studentId.toString());
 
-  const unassignedStudents = await User.find({
-    role: "student",
-    isRemoved: { $ne: true },
-    _id: { $nin: Array.from(otherStudentUserIds) },
-  }).select("_id");
+  const activeIds = (teacherProfile.students || [])
+    .map((id) => id.toString())
+    .filter((id) => !removedIds.includes(id));
 
-  const combined = Array.from(
-    new Set([
-      ...idsFromProfiles.map(String),
-      ...idsFromTeacher.map(String),
-      ...unassignedStudents.map((s) => String(s._id)),
-    ])
-  );
-  return combined;
+  return activeIds;
 };
 
 /**
@@ -55,7 +42,7 @@ const getTeacherDashboard = async (req, res, next) => {
     const attempts = await QuizAttempt.find({
       studentId: { $in: studentIds },
     })
-      .populate("studentId", "name email")
+      .populate("studentId", "name email username")
       .populate("documentId", "title")
       .populate("quizId", "title")
       .sort({ completedAt: -1 })
@@ -64,7 +51,7 @@ const getTeacherDashboard = async (req, res, next) => {
     const totalQuizAttempts = attempts.length;
     let scoreSum = 0;
     attempts.forEach((a) => {
-      scoreSum += a.percentage;
+      scoreSum += a.percentage || 0;
     });
 
     const averageStudentScore = totalQuizAttempts > 0
@@ -75,9 +62,9 @@ const getTeacherDashboard = async (req, res, next) => {
     const recentActivity = attempts.slice(0, 8).map((a) => ({
       id: a._id,
       type: "quiz_attempt",
-      studentName: a.studentId?.name || "Student",
+      studentName: a.studentId?.name || a.studentId?.username || "Student",
       studentEmail: a.studentId?.email,
-      documentTitle: a.quizId?.title || a.documentId?.title || "Study Material",
+      documentTitle: a.quizId?.title || a.documentId?.title || "Class Material",
       score: a.score,
       totalQuestions: a.totalQuestions,
       percentage: a.percentage,
@@ -97,6 +84,8 @@ const getTeacherDashboard = async (req, res, next) => {
       teacherProfile: {
         teacherCode: teacherProfile?.teacherCode,
         department: teacherProfile?.department,
+        subject: teacherProfile?.subject,
+        universityOrCollege: teacherProfile?.universityOrCollege,
       },
       recentActivity,
     });
@@ -112,8 +101,8 @@ const getAssignedStudents = async (req, res, next) => {
   try {
     const studentIds = await getAssignedStudentIds(req.user._id);
 
-    const students = await User.find({ _id: { $in: studentIds }, isRemoved: { $ne: true } })
-      .select("name email createdAt isVerified")
+    const students = await User.find({ _id: { $in: studentIds } })
+      .select("name username email createdAt isVerified")
       .lean();
 
     const studentDocs = await Document.find({ studentId: { $in: studentIds } }).lean();
@@ -127,7 +116,7 @@ const getAssignedStudents = async (req, res, next) => {
 
       const totalAttempts = myAttempts.length;
       const avgScore = totalAttempts > 0
-        ? Math.round(myAttempts.reduce((acc, a) => acc + a.percentage, 0) / totalAttempts)
+        ? Math.round(myAttempts.reduce((acc, a) => acc + (a.percentage || 0), 0) / totalAttempts)
         : 0;
 
       const lastAttempt = myAttempts.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))[0];
@@ -147,6 +136,7 @@ const getAssignedStudents = async (req, res, next) => {
       return {
         id: s._id,
         name: s.name,
+        username: s.username,
         email: s.email,
         totalDocuments: myDocs.length,
         totalQuizAttempts: totalAttempts,
@@ -177,11 +167,11 @@ const getStudentDetails = async (req, res, next) => {
     if (!assignedIds.includes(studentId)) {
       return res.status(403).json({
         success: false,
-        message: "Access denied. This student is not assigned to your classes.",
+        message: "Access denied. This student is not enrolled in your classroom.",
       });
     }
 
-    const student = await User.findById(studentId).select("name email createdAt isVerified");
+    const student = await User.findById(studentId).select("name username email createdAt isVerified");
     if (!student) {
       return res.status(404).json({
         success: false,
@@ -217,7 +207,7 @@ const getStudentDetails = async (req, res, next) => {
 
     const totalAttempts = attempts.length;
     const avgScore = totalAttempts > 0
-      ? Math.round(attempts.reduce((acc, a) => acc + a.percentage, 0) / totalAttempts)
+      ? Math.round(attempts.reduce((acc, a) => acc + (a.percentage || 0), 0) / totalAttempts)
       : 0;
 
     res.json({
@@ -225,9 +215,11 @@ const getStudentDetails = async (req, res, next) => {
       student: {
         id: student._id,
         name: student.name,
+        username: student.username,
         email: student.email,
         createdAt: student.createdAt,
         gradeOrClass: profile?.gradeOrClass || "College / University",
+        classroomCode: profile?.classroomCode || "",
         bio: profile?.bio || "",
       },
       stats: {
@@ -261,7 +253,7 @@ const getStudentQuizResults = async (req, res, next) => {
     if (!assignedIds.includes(studentId)) {
       return res.status(403).json({
         success: false,
-        message: "Access denied. Student is not assigned to your classes.",
+        message: "Access denied. Student is not enrolled in your classroom.",
       });
     }
 
@@ -288,7 +280,7 @@ const getAllAssignedDocuments = async (req, res, next) => {
     const studentIds = await getAssignedStudentIds(req.user._id);
 
     const documents = await Document.find({ studentId: { $in: studentIds } })
-      .populate("studentId", "name email")
+      .populate("studentId", "name username email")
       .sort({ uploadDate: -1 })
       .lean();
 
@@ -314,7 +306,7 @@ const getAllAssignedDocuments = async (req, res, next) => {
         uploadDate: doc.uploadDate,
         student: {
           id: doc.studentId?._id || doc.studentId,
-          name: doc.studentId?.name || "Student",
+          name: doc.studentId?.name || doc.studentId?.username || "Student",
           email: doc.studentId?.email || "",
         },
         hasSummary: Boolean(ai?.summary),
@@ -351,7 +343,7 @@ const getAllAssignedQuizResults = async (req, res, next) => {
     const studentIds = await getAssignedStudentIds(req.user._id);
 
     const attempts = await QuizAttempt.find({ studentId: { $in: studentIds } })
-      .populate("studentId", "name email")
+      .populate("studentId", "name username email")
       .populate("documentId", "title")
       .populate("quizId", "title")
       .sort({ completedAt: -1 })
@@ -361,7 +353,7 @@ const getAllAssignedQuizResults = async (req, res, next) => {
       id: a._id,
       student: {
         id: a.studentId?._id || a.studentId,
-        name: a.studentId?.name || "Student",
+        name: a.studentId?.name || a.studentId?.username || "Student",
         email: a.studentId?.email || "",
       },
       documentTitle: a.quizId?.title || a.documentId?.title || "Class Quiz",
@@ -387,9 +379,9 @@ const getAllAssignedQuizResults = async (req, res, next) => {
   }
 };
 
-
 /**
- * Permanently remove student from class (cannot log in again)
+ * Teacher removes student from classroom
+ * Preserves student account and learning history, but blocks rejoining with code
  */
 const removeStudentFromClass = async (req, res, next) => {
   try {
@@ -404,28 +396,51 @@ const removeStudentFromClass = async (req, res, next) => {
       });
     }
 
-    // Mark as permanently removed
-    student.isRemoved = true;
-    await student.save();
-
-    // Remove from teacher roster
     const teacherProfile = await TeacherProfile.findOne({ userId: teacherUserId });
-    if (teacherProfile) {
-      teacherProfile.students = teacherProfile.students.filter(
-        (id) => id.toString() !== studentId.toString()
-      );
-      await teacherProfile.save();
+    if (!teacherProfile) {
+      return res.status(404).json({
+        success: false,
+        message: "Teacher profile not found.",
+      });
     }
 
-    // Clear teacher assignment from student profile
-    await StudentProfile.findOneAndUpdate(
-      { userId: studentId },
-      { $set: { teacherId: null } }
+    // Remove from active students array
+    teacherProfile.students = teacherProfile.students.filter(
+      (id) => id.toString() !== studentId.toString()
     );
+
+    // Add to removedStudents list if not already present
+    const alreadyRemoved = (teacherProfile.removedStudents || []).some(
+      (r) => r.studentId && r.studentId.toString() === studentId.toString()
+    );
+
+    if (!alreadyRemoved) {
+      teacherProfile.removedStudents.push({
+        studentId: student._id,
+        email: student.email,
+        name: student.name || student.username,
+        removedAt: new Date(),
+        reason: "Removed by instructor from classroom",
+      });
+    }
+
+    await teacherProfile.save();
+
+    // Detach teacher from student's active profile, closing history session
+    const studentProfile = await StudentProfile.findOne({ userId: studentId });
+    if (studentProfile && studentProfile.teacherId && studentProfile.teacherId.toString() === teacherUserId.toString()) {
+      if (studentProfile.classroomHistory && studentProfile.classroomHistory.length > 0) {
+        const last = studentProfile.classroomHistory[studentProfile.classroomHistory.length - 1];
+        if (!last.leftAt) last.leftAt = new Date();
+      }
+      studentProfile.teacherId = null;
+      studentProfile.classroomCode = "";
+      await studentProfile.save();
+    }
 
     res.json({
       success: true,
-      message: `Student ${student.name} (${student.email}) has been permanently removed and cannot log in again.`,
+      message: `Student "${student.name || student.username}" (${student.email}) removed from your classroom. Their learning records remain preserved, but they cannot rejoin using your classroom code.`,
     });
   } catch (err) {
     next(err);
@@ -433,7 +448,65 @@ const removeStudentFromClass = async (req, res, next) => {
 };
 
 /**
- * Teacher sends broadcast announcement to all students in classroom
+ * Teacher unremoves student from classroom
+ * Restores ability for student to rejoin classroom with teacher code
+ */
+const unremoveStudentFromClass = async (req, res, next) => {
+  try {
+    const { studentId } = req.params;
+    const teacherUserId = req.user._id;
+
+    const teacherProfile = await TeacherProfile.findOne({ userId: teacherUserId });
+    if (!teacherProfile) {
+      return res.status(404).json({
+        success: false,
+        message: "Teacher profile not found.",
+      });
+    }
+
+    const initialCount = (teacherProfile.removedStudents || []).length;
+    teacherProfile.removedStudents = (teacherProfile.removedStudents || []).filter(
+      (r) =>
+        r.studentId?.toString() !== studentId.toString() &&
+        r._id?.toString() !== studentId.toString()
+    );
+
+    await teacherProfile.save();
+
+    res.json({
+      success: true,
+      message: "Student unremoved successfully! They are now permitted to rejoin your classroom using your classroom code.",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get Removed Students List
+ */
+const getRemovedStudents = async (req, res, next) => {
+  try {
+    const teacherProfile = await TeacherProfile.findOne({ userId: req.user._id });
+    const list = teacherProfile?.removedStudents || [];
+
+    res.json({
+      success: true,
+      removedStudents: list.map((r) => ({
+        id: r.studentId || r._id,
+        name: r.name,
+        email: r.email,
+        removedAt: r.removedAt,
+        reason: r.reason,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Teacher sends broadcast announcement to all active students in classroom
  */
 const sendBroadcast = async (req, res, next) => {
   try {
@@ -447,11 +520,11 @@ const sendBroadcast = async (req, res, next) => {
     }
 
     const teacherProfile = await TeacherProfile.findOne({ userId: req.user._id });
-    const classroomCode = teacherProfile?.teacherCode || "CLASS-101";
+    const classroomCode = teacherProfile?.teacherCode || "EDVIKO-CLASS";
 
     const broadcast = await Message.create({
       senderId: req.user._id,
-      senderName: req.user.name || "Prof. Sarah Jenkins",
+      senderName: req.user.name || "Faculty Instructor",
       senderRole: "teacher",
       recipientId: null,
       recipientName: "All Students",
@@ -463,18 +536,18 @@ const sendBroadcast = async (req, res, next) => {
       tag,
     });
 
-    // Notify all assigned students in this teacher's classroom
+    // Notify ALL active students in this teacher's classroom
     try {
       const studentIds = await getAssignedStudentIds(req.user._id);
       if (studentIds.length > 0) {
         const notifs = studentIds.map((sId) => ({
           recipientId: sId,
           senderId: req.user._id,
-          senderName: req.user.name || "Prof. Sarah Jenkins",
+          senderName: req.user.name || "Faculty Instructor",
           classroomCode,
           type: "announcement",
           title: `📢 New Class Announcement: ${title.trim()}`,
-          message: content.trim(),
+          message: content.trim().slice(0, 140),
           link: "/student/dashboard",
           isRead: false,
         }));
@@ -486,7 +559,7 @@ const sendBroadcast = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: "Announcement broadcast successfully to all students!",
+      message: "Announcement broadcast successfully to all enrolled students!",
       broadcast,
     });
   } catch (err) {
@@ -514,7 +587,7 @@ const getBroadcasts = async (req, res, next) => {
 };
 
 /**
- * Teacher sends direct message to a particular student
+ * Teacher sends personal direct message to a particular student
  */
 const sendDirectMessage = async (req, res, next) => {
   try {
@@ -535,7 +608,6 @@ const sendDirectMessage = async (req, res, next) => {
       });
     }
 
-    // Verify student exists
     const student = await User.findById(studentId);
     if (!student) {
       return res.status(404).json({
@@ -549,35 +621,35 @@ const sendDirectMessage = async (req, res, next) => {
 
     const msg = await Message.create({
       senderId: req.user._id,
-      senderName: req.user.name || "Prof. Sarah Jenkins",
+      senderName: req.user.name || "Faculty Instructor",
       senderRole: "teacher",
       recipientId: student._id,
-      recipientName: student.name || "Student",
+      recipientName: student.name || student.username || "Student",
       classroomCode,
       isBroadcast: false,
       text: text.trim(),
     });
 
-    // Notify the selected student in MongoDB
+    // Notify the recipient student in MongoDB
     try {
       await Notification.create({
         recipientId: student._id,
         senderId: req.user._id,
-        senderName: req.user.name || "Prof. Sarah Jenkins",
+        senderName: req.user.name || "Faculty Instructor",
         classroomCode,
         type: "message",
         title: `💬 New Message from ${req.user.name || "Professor"}`,
-        message: text.trim(),
+        message: text.trim().slice(0, 140),
         link: "/student/dashboard",
         isRead: false,
       });
     } catch (notifErr) {
-      console.warn("DM notification warning:", notifErr.message);
+      console.warn("Teacher to student notification warning:", notifErr.message);
     }
 
     res.status(201).json({
       success: true,
-      message: `Direct message delivered to ${student.name}!`,
+      message: `Message delivered to ${student.name || student.username}!`,
       directMessage: msg,
     });
   } catch (err) {
@@ -609,16 +681,86 @@ const getStudentDirectMessages = async (req, res, next) => {
   }
 };
 
+/**
+ * Teacher gets list of conversation threads with students
+ */
+const getConversationsList = async (req, res, next) => {
+  try {
+    const teacherId = req.user._id;
+
+    // Find all distinct students involved in messages with this teacher
+    const messages = await Message.find({
+      isBroadcast: false,
+      $or: [{ senderId: teacherId }, { recipientId: teacherId }],
+    }).sort({ createdAt: -1 });
+
+    const studentMap = new Map();
+    for (const m of messages) {
+      const otherId = m.senderId.toString() === teacherId.toString()
+        ? m.recipientId.toString()
+        : m.senderId.toString();
+
+      if (!studentMap.has(otherId)) {
+        studentMap.set(otherId, {
+          studentId: otherId,
+          lastMessage: m.text,
+          lastSenderRole: m.senderRole,
+          timestamp: m.createdAt,
+        });
+      }
+    }
+
+    // Also include any currently enrolled students without messages yet
+    const assignedIds = await getAssignedStudentIds(teacherId);
+    for (const sId of assignedIds) {
+      if (!studentMap.has(sId)) {
+        studentMap.set(sId, {
+          studentId: sId,
+          lastMessage: "No messages yet",
+          lastSenderRole: "",
+          timestamp: null,
+        });
+      }
+    }
+
+    const studentUserIds = Array.from(studentMap.keys());
+    const users = await User.find({ _id: { $in: studentUserIds } }).select("name username email");
+
+    const result = users.map((u) => {
+      const thread = studentMap.get(u._id.toString());
+      return {
+        studentId: u._id,
+        name: u.name,
+        username: u.username,
+        email: u.email,
+        lastMessage: thread?.lastMessage || "",
+        lastSenderRole: thread?.lastSenderRole || "",
+        timestamp: thread?.timestamp || null,
+      };
+    });
+
+    res.json({
+      success: true,
+      conversations: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
-  removeStudentFromClass,
   getTeacherDashboard,
   getAssignedStudents,
   getStudentDetails,
   getStudentQuizResults,
   getAllAssignedDocuments,
   getAllAssignedQuizResults,
+  removeStudentFromClass,
+  unremoveStudentFromClass,
+  getRemovedStudents,
   sendBroadcast,
   getBroadcasts,
   sendDirectMessage,
   getStudentDirectMessages,
+  getConversationsList,
 };
