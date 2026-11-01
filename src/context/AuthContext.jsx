@@ -111,7 +111,15 @@ export function AuthProvider({ children }) {
   };
 
   const verifyOtp = async (email, otp) => {
-    return await authApi.verifyStudentOtp({ email, otp });
+    const res = await authApi.verifyStudentOtp({ email, otp });
+    if (res.token) {
+      localStorage.setItem("lerniq_token", res.token);
+    }
+    if (res.user) {
+      localStorage.setItem("lerniq_user", JSON.stringify(res.user));
+      setUser(res.user);
+    }
+    return res;
   };
 
   const logout = async () => {

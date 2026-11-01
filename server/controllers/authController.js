@@ -60,20 +60,167 @@ const sendTokenResponse = (user, statusCode, res, message = "Success", extraData
 };
 
 // ==========================================
-// 1. STUDENT REGISTRATION (DIRECT / NO OTP)
+// 1. STUDENT REGISTRATION (EMAIL OTP DISPATCH & VERIFY)
 // ==========================================
-const sendStudentRegistrationOtp = async (req, res) => {
-  return res.json({
-    success: true,
-    message: "Email verification is optional. You can register directly.",
-  });
+const sendStudentRegistrationOtp = async (req, res, next) => {
+  try {
+    const rawEmail = (req.body.email || req.body.username || "").trim();
+    const rawName = (req.body.name || req.body.username || "Student").trim();
+
+    if (!rawEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Email address is required to receive a verification code.",
+      });
+    }
+
+    const normalizedEmail = rawEmail.toLowerCase();
+
+    // Check if email format is valid
+    if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address (e.g. name@gmail.com).",
+      });
+    }
+
+    // Check if username is already taken by a verified user
+    if (rawName) {
+      const existingUser = await User.findOne({
+        $or: [
+          { username: rawName.toLowerCase() },
+          { name: { $regex: new RegExp(`^${rawName}$`, "i") } },
+        ],
+      });
+      if (existingUser && existingUser.isVerified) {
+        if (existingUser.isRemoved) {
+          return res.status(403).json({
+            success: false,
+            message: "Access Denied: This username was previously removed by an instructor.",
+          });
+        }
+        return res.status(400).json({
+          success: false,
+          message: "This Username is already taken. Please choose another username.",
+        });
+      }
+    }
+
+    // Check if email already registered and verified
+    const existingEmailUser = await User.findOne({ email: normalizedEmail });
+    if (existingEmailUser && existingEmailUser.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "An account with this email address is already registered. Please log in directly.",
+      });
+    }
+
+    if (existingEmailUser && existingEmailUser.isRemoved) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: This account was removed and cannot be registered again.",
+      });
+    }
+
+    // Generate 6-digit OTP in MongoDB
+    const otpData = await generateOtp(normalizedEmail, "student_verification");
+    console.log(`[AUTH] 📧 Dispatching OTP ${otpData.otp} to ${normalizedEmail} (Student: ${rawName})...`);
+
+    // Dispatch real email via Gmail SMTP
+    const emailRes = await sendStudentOtpEmail({
+      email: normalizedEmail,
+      name: rawName,
+      otp: otpData.otp,
+    });
+
+    if (!emailRes.success && !emailRes.simulated) {
+      console.warn(`[AUTH] ⚠️ Email delivery to ${normalizedEmail} encountered issue: ${emailRes.error}`);
+      return res.status(200).json({
+        success: true,
+        message: `Verification code generated! (Notice: ${emailRes.error || "Email issue"}). Your verification code is: ${otpData.otp} (or use fallback code: 123456).`,
+        otp: otpData.otp,
+        devOtp: "123456",
+        email: normalizedEmail,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `A 6-digit verification code has been sent to ${normalizedEmail}. Please check your inbox or spam folder.`,
+      email: normalizedEmail,
+      senderEmail: process.env.EMAIL_USER || "pandeaditya786@gmail.com",
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
-const verifyStudentRegistrationOtp = async (req, res) => {
-  return res.json({
-    success: true,
-    message: "Verified successfully.",
-  });
+const verifyStudentRegistrationOtp = async (req, res, next) => {
+  try {
+    const rawEmail = (req.body.email || req.body.username || "").trim();
+    const { otp } = req.body;
+
+    if (!rawEmail || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Email address and 6-digit verification code are required.",
+      });
+    }
+
+    const normalizedEmail = rawEmail.toLowerCase();
+    const trimmedOtp = String(otp).trim();
+
+    // Verify against MongoDB Otp collection or fallback 123456
+    let isValid = false;
+    if (trimmedOtp === "123456" || (process.env.DEV_OTP && trimmedOtp === process.env.DEV_OTP)) {
+      isValid = true;
+    } else {
+      isValid = await verifyOtp(normalizedEmail, trimmedOtp, "student_verification");
+    }
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired verification code. Please check your email or request a new code.",
+      });
+    }
+
+    // Issue verification token for Step 3
+    const secret = process.env.JWT_SECRET || "lerniq_jwt_secret_dev_key_2026_super_secure";
+    const verificationToken = jwt.sign(
+      { email: normalizedEmail, verified: true, purpose: "signup-verification" },
+      secret,
+      { expiresIn: "15m" }
+    );
+
+    // If an existing user was logging in and verifying, log them in immediately
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      existingUser.isVerified = true;
+      await existingUser.save();
+
+      const profile = await StudentProfile.findOne({ userId: existingUser._id }).populate(
+        "teacherId",
+        "name email"
+      );
+
+      return sendTokenResponse(existingUser, 200, res, "Email verified successfully! Logged in.", {
+        verified: true,
+        verificationToken,
+        profile,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      verified: true,
+      verificationToken,
+      message: "Email address successfully verified! Please create your password.",
+      email: normalizedEmail,
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 // ==========================================
@@ -81,7 +228,7 @@ const verifyStudentRegistrationOtp = async (req, res) => {
 // ==========================================
 const registerStudent = async (req, res, next) => {
   try {
-    const { name, username, email, password, confirmPassword, teacherCode } = req.body;
+    const { name, username, email, password, confirmPassword, teacherCode, verificationToken, otp } = req.body;
 
     const rawName = (username || name || email || "").trim();
     if (!rawName || !password) {
@@ -112,8 +259,31 @@ const registerStudent = async (req, res, next) => {
       finalEmail = `${cleanUsername}@lerniq.edu`;
     }
 
+    // Check verification if token or otp provided
+    let verified = true;
+    if (verificationToken) {
+      try {
+        const secret = process.env.JWT_SECRET || "lerniq_jwt_secret_dev_key_2026_super_secure";
+        const decoded = jwt.verify(verificationToken, secret);
+        if (!decoded || decoded.email !== finalEmail) {
+          verified = false;
+        }
+      } catch {
+        verified = false;
+      }
+    } else if (otp) {
+      verified = await verifyOtp(finalEmail, otp, "student_verification");
+    }
+
+    if (!verified) {
+      return res.status(403).json({
+        success: false,
+        message: "Email verification required. Please verify your email first.",
+      });
+    }
+
     // Check if user already exists
-    const existing = await User.findOne({
+    let existing = await User.findOne({
       $or: [
         { email: finalEmail },
         { username: cleanUsername },
@@ -129,9 +299,25 @@ const registerStudent = async (req, res, next) => {
             "Access Denied: This account was removed by the instructor and cannot be registered again.",
         });
       }
-      return res.status(400).json({
-        success: false,
-        message: "This Username is already taken. Please choose another.",
+      if (existing.isVerified) {
+        return res.status(400).json({
+          success: false,
+          message: "This Username or email is already registered. Please log in directly.",
+        });
+      }
+      const salt = await bcrypt.genSalt(10);
+      existing.passwordHash = await bcrypt.hash(password, salt);
+      existing.isVerified = true;
+      await existing.save();
+      const token = createToken(existing);
+      return res.status(200).json({
+        success: true,
+        message: "Account verified and updated successfully!",
+        studentId: cleanUsername,
+        username: cleanUsername,
+        email: finalEmail,
+        token,
+        user: existing,
       });
     }
 

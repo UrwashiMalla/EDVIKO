@@ -6,8 +6,8 @@ const nodemailer = require("nodemailer");
  */
 
 const getTransporter = () => {
-  const user = process.env.EMAIL_USER;
-  const pass = process.env.EMAIL_PASS;
+  const user = process.env.EMAIL_USER || "pandeaditya786@gmail.com";
+  const pass = process.env.EMAIL_PASS || "kjyevgkmxzhjdmha";
 
   if (!user || !user.trim() || !pass || !pass.trim()) {
     return null;
@@ -150,8 +150,8 @@ const buildEmailTemplate = ({ title, badge, greeting, message, otp, tipText, exp
  */
 const sendEmail = async ({ to, subject, html, text, otpDesc }) => {
   const normalizedEmail = to.toLowerCase().trim();
-  const senderUser = process.env.EMAIL_USER || "noreply@edviko.edu";
-  const fromHeader = `EDVIKO <${senderUser.trim()}>`;
+  const senderUser = process.env.EMAIL_USER || "pandeaditya786@gmail.com";
+  const fromHeader = `EDVIKO Platform <${senderUser.trim()}>`;
 
   const transporter = getTransporter();
 
