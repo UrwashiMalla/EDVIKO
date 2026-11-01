@@ -9,6 +9,7 @@ import {
   getTeacherSubject,
   setTeacherSubject,
   getTeacherClassCode,
+  setTeacherClassCode,
   getClassroomEntries,
   markClassroomEntriesAsRead,
   onLerniqSync,
@@ -55,10 +56,25 @@ function Navbar({ activeTab = "dashboard" }) {
     }
   };
 
-  // Unique Teacher Class Code
+  // Unique Teacher Class Code (synchronized with backend & teacher dashboard)
   const [classCode, setClassCode] = useState(() => {
-    return user?.profile?.teacherCode || getTeacherClassCode(user?.id || user?._id || "default_teacher");
+    return user?.profile?.teacherCode || user?.teacherCode || getTeacherClassCode(user?.id || user?._id || "default_teacher");
   });
+
+  // Keep Navbar teacher class code 100% in sync with real MongoDB TeacherProfile
+  useEffect(() => {
+    if (isTeacher) {
+      teacherApi.getDashboard()
+        .then((res) => {
+          if (res && res.teacherProfile && res.teacherProfile.teacherCode) {
+            const realCode = res.teacherProfile.teacherCode;
+            setClassCode(realCode);
+            setTeacherClassCode(realCode, user?.id || user?._id || "default_teacher");
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isTeacher, user]);
 
   // Notifications State (MongoDB backed for BOTH Teacher & Student)
   const [userNotifications, setUserNotifications] = useState([]);
@@ -119,6 +135,11 @@ function Navbar({ activeTab = "dashboard" }) {
     const unsubscribe = onLerniqSync((detail) => {
       fetchUserNotifications(false);
       const p = detail.payload || {};
+
+      // Sync classroom code in real-time across components
+      if (detail.type === "CLASSROOM_CODE_UPDATED" && detail.payload?.code) {
+        setClassCode(detail.payload.code);
+      }
 
       // ONLY display quiz alert popup when a quiz is explicitly published or uploaded.
       // Personal messaging or announcements never trigger a quiz alert.
@@ -187,12 +208,27 @@ function Navbar({ activeTab = "dashboard" }) {
     navigate("/");
   };
 
-  const handleProfileClick = () => {
+  const handleProfileClick = async () => {
     if (isTeacher) {
       setTeacherName(user?.name || "Prof. Sarah Jenkins");
       setTeacherSubjectState(getTeacherSubject());
       setInstitutionState(getInstitutionName());
       fetchRemovedStudents();
+
+      // Ensure classCode in Teacher Profile matches Dashboard exactly
+      try {
+        const res = await teacherApi.getDashboard();
+        if (res && res.teacherProfile && res.teacherProfile.teacherCode) {
+          const realCode = res.teacherProfile.teacherCode;
+          setClassCode(realCode);
+          setTeacherClassCode(realCode, user?.id || user?._id || "default_teacher");
+        }
+      } catch {
+        if (user?.profile?.teacherCode || user?.teacherCode) {
+          setClassCode(user.profile?.teacherCode || user.teacherCode);
+        }
+      }
+
       setShowTeacherProfile(true);
     } else {
       navigate("/student/profile");

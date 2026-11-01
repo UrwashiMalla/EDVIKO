@@ -15,6 +15,17 @@ const getStoredToken = () => {
   return localStorage.getItem("edviko_token") || localStorage.getItem("lerniq_token");
 };
 
+const formatUserSession = (rawUser, extra = {}) => {
+  if (!rawUser) return null;
+  const profile = extra.profile || rawUser.profile || null;
+  const teacherCode = profile?.teacherCode || extra.classroomCode || rawUser.teacherCode || null;
+  return {
+    ...rawUser,
+    profile,
+    teacherCode,
+  };
+};
+
 const setSession = (token, user) => {
   if (token) {
     localStorage.setItem("edviko_token", token);
@@ -59,8 +70,9 @@ export function AuthProvider({ children }) {
         const res = await authApi.getMe();
         if (isMounted) {
           if (res.success && res.user) {
-            setUser(res.user);
-            setSession(token, res.user);
+            const formatted = formatUserSession(res.user, res);
+            setUser(formatted);
+            setSession(token, formatted);
           } else {
             clearSession();
             setUser(null);
@@ -94,8 +106,9 @@ export function AuthProvider({ children }) {
   const loginTeacher = async (email, password) => {
     const res = await authApi.loginTeacher({ email, password });
     if (res.token && res.user) {
-      setSession(res.token, res.user);
-      setUser(res.user);
+      const formatted = formatUserSession(res.user, res);
+      setSession(res.token, formatted);
+      setUser(formatted);
     }
     return res;
   };
@@ -150,8 +163,9 @@ export function AuthProvider({ children }) {
     try {
       const res = await authApi.getMe();
       if (res.success && res.user) {
-        setUser(res.user);
-        setSession(null, res.user);
+        const formatted = formatUserSession(res.user, res);
+        setUser(formatted);
+        setSession(null, formatted);
       }
     } catch (err) {
       console.warn("User refresh error:", err.message);

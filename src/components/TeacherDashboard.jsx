@@ -17,6 +17,7 @@ import {
   DEFAULT_STUDENTS_LIST,
   getRemovedStudentIds,
   getTeacherClassCode,
+  setTeacherClassCode,
   onLerniqSync,
 } from "../services/frontendStorage";
 import Navbar from "./Navbar";
@@ -86,6 +87,9 @@ function TeacherDashboard() {
           teacherApi.getStudents(),
         ]);
         setDashboardData(dashRes);
+        if (dashRes?.teacherProfile?.teacherCode) {
+          setTeacherClassCode(dashRes.teacherProfile.teacherCode, user?.id || user?._id || "default_teacher");
+        }
         const removedIds = getRemovedStudentIds();
         const activeStudentsList = (studentsRes.students || []).filter(
           (s) => !removedIds.includes(String(s.id))
@@ -232,6 +236,14 @@ function TeacherDashboard() {
     try {
       const res = await teacherApi.regenerateClassroomCode({});
       if (res.code) {
+        setDashboardData((prev) => ({
+          ...prev,
+          teacherProfile: {
+            ...prev?.teacherProfile,
+            teacherCode: res.code,
+          },
+        }));
+        setTeacherClassCode(res.code, user?.id || user?._id || "default_teacher");
         showToast(`Classroom code updated to ${res.code}!`);
       }
     } catch (err) {

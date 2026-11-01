@@ -101,14 +101,23 @@ export const setTeacherSubject = (subj) => {
 // ==========================================
 export const getTeacherClassCode = (teacherId = "default_teacher") => {
   const key = `${STORAGE_KEYS.TEACHER_CLASS_CODE}_${teacherId}`;
-  let code = localStorage.getItem(key);
+  let code = localStorage.getItem(key) || localStorage.getItem(STORAGE_KEYS.TEACHER_CLASS_CODE);
   if (!code) {
-    // Generate unique random class code: e.g. TEACH-8K4P
     const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
     code = `TEACH-${rand}`;
     localStorage.setItem(key, code);
   }
   return code;
+};
+
+export const setTeacherClassCode = (code, teacherId = "default_teacher") => {
+  if (code && String(code).trim()) {
+    const trimmed = String(code).trim();
+    const key = `${STORAGE_KEYS.TEACHER_CLASS_CODE}_${teacherId}`;
+    localStorage.setItem(key, trimmed);
+    localStorage.setItem(STORAGE_KEYS.TEACHER_CLASS_CODE, trimmed);
+    notifyLerniqSync("CLASSROOM_CODE_UPDATED", { code: trimmed, teacherId });
+  }
 };
 
 // Default Enrolled Class Students (Removed mock examples - only real registered students are shown)
