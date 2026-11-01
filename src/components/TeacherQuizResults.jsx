@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getTeacherQuizzes, sendQuizReminder, notifyLerniqSync, onLerniqSync } from "../services/frontendStorage";
-import { quizApi } from "../services/api";
+import { quizApi, teacherApi } from "../services/api";
 import { useAuth } from "../context/useAuth";
 import Navbar from "./Navbar";
 
@@ -115,22 +115,40 @@ function TeacherQuizResults() {
     return unsubscribe;
   }, [searchParams]);
 
-  const handleSendReminderToStudent = (std) => {
+  const handleSendReminderToStudent = async (std) => {
     if (!selectedQuiz) return;
+    const sId = std.studentId || std.id;
+    const qTitle = selectedQuiz.title;
+    const qId = selectedQuiz._id || selectedQuiz.id;
+
+    // 1. Send via backend API to store message & notification in MongoDB
+    try {
+      if (sId) {
+        await teacherApi.sendDirectMessage(sId, {
+          text: `Quiz Reminder: Please attempt and complete your quiz "${qTitle}". Test your knowledge now!`,
+          type: "quiz_reminder",
+          quizId: qId,
+          quizTitle: qTitle,
+        });
+      }
+    } catch (err) {
+      console.warn("Backend quiz reminder API warning:", err.message);
+    }
+
+    // 2. Also send via frontend storage and sync bus
     sendQuizReminder({
-      studentId: std.studentId || std.id,
+      studentId: sId,
       studentName: std.name,
       studentEmail: std.email,
-      quizTitle: selectedQuiz.title,
+      quizTitle: qTitle,
       teacherName: user?.name || "Prof. Sarah Jenkins",
     });
 
-    // Also broadcast on sync bus for real-time notification
     notifyLerniqSync("QUIZ_NOTIFICATION", {
-      title: `Reminder: ${selectedQuiz.title}`,
-      message: `${user?.name || "Your Teacher"} sent a reminder to complete "${selectedQuiz.title}".`,
-      studentId: std.studentId || std.id,
-      quizId: selectedQuiz.id,
+      title: `Reminder: ${qTitle}`,
+      message: `${user?.name || "Your Teacher"} sent a reminder to complete "${qTitle}".`,
+      studentId: sId,
+      quizId: qId,
     });
 
     showToast(`📢 Reminder delivered directly to ${std.name} (${std.email})!`);

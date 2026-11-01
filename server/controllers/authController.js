@@ -430,7 +430,8 @@ const registerStudent = async (req, res, next) => {
           type: "general",
           title: "👋 New Student Joined Classroom",
           message: `${user.name} (${user.username || user.email}) registered and joined classroom ${cleanTeacherCode}.`,
-          link: "/teacher/students",
+          link: `/teacher/students/${user._id}`,
+          metadata: { studentId: user._id },
           isRead: false,
         });
       } catch (notifErr) {

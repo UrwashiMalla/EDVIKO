@@ -1,84 +1,83 @@
 /* =========================================================
-   EDVIKO / LERNIQ - STUDENT PROFILE PAGE STYLES
+   EDVIKO - STUDENT PROFILE PAGE STYLES
    Modern SaaS, Minimalist Purple & White Design System
 ========================================================= */
 
-.student-profile-container {
+.student-profile-page {
   min-height: 100vh;
   background-color: #faf9ff;
   color: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding-bottom: 60px;
 }
 
-.profile-main-content {
-  max-width: 860px;
-  margin: 36px auto 60px;
+.profile-container {
+  max-width: 900px;
+  margin: 36px auto;
   padding: 0 24px;
 }
 
-/* Page Heading */
-.profile-page-header {
-  margin-bottom: 24px;
-}
-
-.profile-page-header h1 {
-  font-size: 28px;
-  font-weight: 800;
-  color: #0f172a;
-  letter-spacing: -0.5px;
-  margin: 0 0 6px 0;
-}
-
-.profile-page-header p {
+/* Loading State */
+.profile-loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
   color: #64748b;
-  font-size: 15px;
-  margin: 0;
+  font-weight: 600;
+}
+
+.profile-loading-state .spinner {
+  width: 40px;
+  height: 40px;
+  border: 3.5px solid #ede9fe;
+  border-top-color: #7c3aed;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Feedback Alerts */
 .profile-alert {
   padding: 14px 18px;
-  border-radius: 12px;
-  font-size: 14px;
+  border-radius: 14px;
+  font-size: 13.5px;
   font-weight: 600;
   margin-bottom: 20px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  gap: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
 }
 
-.profile-alert-success {
+.profile-alert.success {
   background-color: #f0fdf4;
   color: #166534;
   border: 1px solid #bbf7d0;
 }
 
-.profile-alert-error {
+.profile-alert.error {
   background-color: #fef2f2;
   color: #991b1b;
   border: 1px solid #fecaca;
 }
 
-.alert-dismiss-btn {
-  background: transparent;
-  border: none;
-  font-size: 16px;
-  cursor: pointer;
-  color: inherit;
-  padding: 0 4px;
-  line-height: 1;
-}
-
 /* =========================================================
-   1. HERO CARD (Avatar + Name + Status + Edit Action)
+   1. HERO PROFILE CARD
 ========================================================= */
-
 .profile-hero-card {
   background: #ffffff;
-  border-radius: 20px;
+  border-radius: 24px;
   border: 1px solid #ede9fe;
   padding: 32px;
-  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.04);
+  box-shadow: 0 10px 30px rgba(124, 58, 237, 0.05);
   margin-bottom: 24px;
   display: flex;
   align-items: center;
@@ -91,68 +90,49 @@
   display: flex;
   align-items: center;
   gap: 24px;
+  flex: 1;
+  min-width: 280px;
 }
 
 /* Avatar Container & Camera Button */
-.profile-avatar-wrapper {
+.avatar-wrapper {
   position: relative;
-  width: 96px;
-  height: 96px;
+  width: 104px;
+  height: 104px;
   flex-shrink: 0;
 }
 
-.profile-avatar-circle {
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
-  overflow: hidden;
-  box-shadow: 0 0 0 4px #ffffff, 0 4px 14px rgba(124, 58, 237, 0.15);
-  border: 2px solid #ddd6fe;
-  background: #f5f3ff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.profile-avatar-img {
+.avatar-img {
   width: 100%;
   height: 100%;
+  border-radius: 50%;
   object-fit: cover;
+  border: 3px solid #7c3aed;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.2);
   display: block;
 }
 
-.profile-avatar-fallback {
+.avatar-placeholder {
   width: 100%;
   height: 100%;
+  border-radius: 50%;
   background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
   color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 38px;
+  font-size: 40px;
   font-weight: 800;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.2);
   text-transform: uppercase;
 }
 
-.profile-avatar-spinner {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  color: #ffffff;
-}
-
-/* Camera Badge */
-.profile-avatar-camera-btn {
+.avatar-upload-badge {
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: #7c3aed;
   color: #ffffff;
@@ -161,324 +141,357 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.35);
+  box-shadow: 0 3px 10px rgba(124, 58, 237, 0.35);
   transition: all 0.2s ease;
+  font-size: 14px;
 }
 
-.profile-avatar-camera-btn:hover {
+.avatar-upload-badge:hover {
   background: #6d28d9;
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
-.profile-avatar-camera-btn .camera-icon {
-  font-size: 14px;
-  line-height: 1;
+.avatar-upload-badge:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-/* Hero Details */
-.hero-details h2 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  color: #0f172a;
-  letter-spacing: -0.3px;
+/* Identity Block */
+.identity-block {
+  flex: 1;
+  min-width: 0;
 }
 
-.hero-email {
-  color: #64748b;
-  font-size: 14px;
-  margin-top: 4px;
+.identity-badges {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  margin-bottom: 6px;
 }
 
-.verification-pill {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 8px;
+.role-tag.student {
+  background: #ede9fe;
+  color: #6d28d9;
+  padding: 3px 10px;
   border-radius: 6px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
 }
 
-.verification-pill.verified {
-  background: #ecfdf5;
-  color: #047857;
-  border: 1px solid #a7f3d0;
+.institution-tag {
+  background: #f1f5f9;
+  color: #475569;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.verification-pill.unverified {
-  background: #fffbeb;
-  color: #b45309;
-  border: 1px solid #fde68a;
+.student-display-name {
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.5px;
+  margin: 4px 0 2px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.hero-badges {
+.student-username {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0 0 8px 0;
+  font-weight: 500;
+}
+
+.remove-avatar-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.remove-avatar-btn:hover {
+  color: #b91c1c;
+  text-decoration: underline;
+}
+
+/* Hero Action Buttons */
+.hero-right {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 10px;
 }
 
-.role-badge {
-  font-size: 12px;
-  font-weight: 700;
-  background: #f5f3ff;
-  color: #6d28d9;
-  padding: 4px 10px;
-  border-radius: 8px;
-  border: 1px solid #ddd6fe;
-}
-
-/* Edit Toggle Button */
-.edit-profile-toggle-btn {
+.edit-profile-btn {
   padding: 10px 20px;
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  color: #ffffff;
+  border: none;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
   transition: all 0.2s ease;
-  border: 1.5px solid #ddd6fe;
-  background: #f5f3ff;
-  color: #6d28d9;
 }
 
-.edit-profile-toggle-btn:hover {
-  background: #ede9fe;
-  border-color: #c4b5fd;
+.edit-profile-btn:hover {
   transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);
 }
 
-.edit-profile-toggle-btn.active {
-  background: #f8fafc;
-  color: #64748b;
-  border-color: #cbd5e1;
+.cancel-edit-btn {
+  padding: 10px 18px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cancel-edit-btn:hover {
+  background: #e2e8f0;
 }
 
 /* =========================================================
-   2. PROFILE COMPLETION INDICATOR
+   2. PROFILE COMPLETION PROGRESS CARD
 ========================================================= */
-
-.profile-completion-card {
+.completion-card {
   background: #ffffff;
-  border-radius: 16px;
+  border-radius: 20px;
   border: 1px solid #ede9fe;
-  padding: 20px 24px;
+  padding: 24px 28px;
   box-shadow: 0 4px 20px rgba(124, 58, 237, 0.03);
   margin-bottom: 24px;
 }
 
 .completion-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.completion-title {
-  display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #334155;
+  margin-bottom: 12px;
 }
 
-.completion-pct {
-  font-size: 14px;
+.completion-header h3 {
+  font-size: 16px;
   font-weight: 800;
-  color: #7c3aed;
+  color: #1e1b4b;
+  margin: 0 0 4px 0;
 }
 
-.completion-bar-track {
-  width: 100%;
-  height: 8px;
-  background: #f1f5f9;
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 10px;
-}
-
-.completion-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #7c3aed 0%, #a855f7 100%);
-  border-radius: 10px;
-  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.completion-tip {
-  font-size: 12px;
+.completion-header p {
+  font-size: 13px;
   color: #64748b;
   margin: 0;
+}
+
+.completion-badge {
+  background: #ede9fe;
+  color: #6d28d9;
+  padding: 6px 14px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 800;
+  border: 1px solid #ddd6fe;
+}
+
+.progress-track-bg {
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 12px 0;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #a855f7);
+  border-radius: 4px;
+}
+
+.missing-items-hint {
+  font-size: 12.5px;
+  color: #64748b;
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-top: 6px;
+}
+
+.missing-items-hint.complete {
+  color: #059669;
+  font-weight: 600;
 }
 
 /* =========================================================
-   3. INFORMATION TILES (VIEW MODE)
+   3. MAIN PROFILE DETAILS CARD
 ========================================================= */
-
 .profile-details-card {
   background: #ffffff;
-  border-radius: 20px;
+  border-radius: 24px;
   border: 1px solid #ede9fe;
-  padding: 32px;
-  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.04);
-}
-
-.details-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 18px;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 28px 32px;
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.03);
   margin-bottom: 24px;
 }
 
-.details-card-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: #0f172a;
+.section-title-row {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
+.section-title-row h2 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 4px 0;
+}
+
+.section-subtitle {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* Detail Tiles Grid */
 .details-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
 }
 
 .detail-tile {
-  background: #fbfaff;
-  border: 1px solid #f1eefb;
-  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
   padding: 18px 20px;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 .detail-tile:hover {
-  border-color: #ddd6fe;
-  background: #f8fafc;
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
+
+.detail-tile.full-width {
+  grid-column: 1 / -1;
+  background: #faf5ff;
+  border-color: #ede9fe;
+}
+
+.detail-tile.full-width:hover {
+  background: #f5f3ff;
 }
 
 .tile-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: #64748b;
-  margin-bottom: 6px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
 }
 
 .tile-value {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: #0f172a;
 }
 
 .tile-subtext {
   font-size: 12px;
-  color: #94a3b8;
+  color: #64748b;
   margin-top: 4px;
+  line-height: 1.4;
 }
 
-.detail-tile.full-width {
-  grid-column: span 2;
-}
-
-/* Institution Tile (Locked) */
-.institution-tile {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-}
-
-.lock-badge {
-  font-size: 11px;
-  font-weight: 600;
-  background: #f1f5f9;
-  color: #475569;
-  padding: 2px 8px;
-  border-radius: 4px;
-  margin-left: auto;
-}
-
-/* =========================================================
-   4. FORM STYLES (EDIT MODE)
-========================================================= */
-
+/* Edit Form */
 .profile-edit-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
+  gap: 6px;
 }
 
 .form-group label {
   font-size: 13px;
   font-weight: 700;
   color: #334155;
-  margin-bottom: 6px;
 }
 
-.form-group input {
-  width: 100%;
-  padding: 12px 16px;
-  border-radius: 12px;
-  border: 1.5px solid #e2e8f0;
+.form-group label span {
+  color: #ef4444;
+}
+
+.form-group input,
+.form-group select {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1.5px solid #cbd5e1;
   font-size: 14px;
-  color: #0f172a;
-  outline: none;
-  background: #ffffff;
-  transition: all 0.2s ease;
+  font-weight: 600;
+  color: #1e293b;
   box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s ease;
+  background: #ffffff;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group select:focus {
   border-color: #7c3aed;
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
 }
 
 .form-group small {
+  font-size: 11.5px;
   color: #64748b;
-  font-size: 12px;
-  margin-top: 4px;
 }
 
 .mentor-edit-box {
-  background: #fbfaff;
+  background: #faf5ff;
   border: 1px solid #ede9fe;
   border-radius: 14px;
-  padding: 18px 20px;
+  padding: 16px 18px;
 }
 
 .form-actions {
   display: flex;
-  align-items: center;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 10px;
+  margin-top: 12px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
 }
 
 .save-profile-btn {
-  padding: 12px 28px;
-  border-radius: 12px;
-  border: none;
+  padding: 11px 24px;
   background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
   color: #ffffff;
+  border: none;
+  border-radius: 12px;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -486,7 +499,7 @@
   transition: all 0.2s ease;
 }
 
-.save-profile-btn:hover:not(:disabled) {
+.save-profile-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);
 }
@@ -496,34 +509,17 @@
   cursor: not-allowed;
 }
 
-.cancel-edit-btn {
-  padding: 12px 22px;
-  border-radius: 12px;
-  border: 1.5px solid #cbd5e1;
-  background: #ffffff;
-  color: #475569;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.cancel-edit-btn:hover {
-  background: #f1f5f9;
-}
-
 /* =========================================================
-   RESPONSIVE DESIGN (MOBILE & TABLET)
+   4. RESPONSIVE BREAKPOINTS
 ========================================================= */
-
 @media (max-width: 640px) {
-  .profile-main-content {
-    margin: 20px auto 40px;
+  .profile-container {
     padding: 0 16px;
+    margin: 20px auto;
   }
 
   .profile-hero-card {
-    padding: 24px 20px;
+    padding: 24px;
     flex-direction: column;
     align-items: flex-start;
   }
@@ -534,25 +530,103 @@
     gap: 16px;
   }
 
-  .edit-profile-toggle-btn {
+  .hero-right {
+    width: 100%;
+    margin-top: 12px;
+  }
+
+  .edit-profile-btn,
+  .cancel-edit-btn {
     width: 100%;
     justify-content: center;
+  }
+
+  .profile-details-card {
+    padding: 20px;
   }
 
   .details-grid {
     grid-template-columns: 1fr;
   }
+}
 
-  .detail-tile.full-width {
-    grid-column: span 1;
-  }
+/* Classroom Management Form */
+.classroom-switch-form {
+  margin-top: 18px;
+}
 
-  .form-actions {
-    flex-direction: column-reverse;
-  }
+.classroom-switch-row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
 
-  .save-profile-btn,
-  .cancel-edit-btn {
-    width: 100%;
-  }
+.classroom-input-wrap {
+  flex: 1;
+  min-width: 220px;
+}
+
+.classroom-switch-btn {
+  padding: 12px 24px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
+  transition: all 0.2s ease;
+  height: 44px;
+}
+
+.classroom-switch-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);
+}
+
+.classroom-switch-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* History Timeline */
+.history-timeline {
+  margin-top: 28px;
+}
+
+.history-timeline h3 {
+  font-size: 16px;
+  font-weight: 800;
+  color: #1e1b4b;
+  margin: 0 0 12px 0;
+}
+
+.history-card-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 13.5px;
+  transition: all 0.15s ease;
+}
+
+.history-card-item:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.history-active-tag {
+  background: #ecfdf5;
+  color: #059669;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #a7f3d0;
+  margin-left: 8px;
 }

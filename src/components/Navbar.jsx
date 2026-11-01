@@ -76,6 +76,18 @@ function Navbar({ activeTab = "dashboard" }) {
     }
   }, [isTeacher, user]);
 
+  // Prevent background scrolling while Teacher Profile modal is open
+  useEffect(() => {
+    if (showTeacherProfile) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [showTeacherProfile]);
+
   // Notifications State (MongoDB backed for BOTH Teacher & Student)
   const [userNotifications, setUserNotifications] = useState([]);
   const [showStudentNotificationPopup, setShowStudentNotificationPopup] = useState(false);
@@ -578,10 +590,20 @@ function Navbar({ activeTab = "dashboard" }) {
                         <div style={{ fontSize: "11px", fontWeight: "800", color: "#6d28d9", textTransform: "uppercase", padding: "2px 6px", marginBottom: "6px" }}>
                           Classroom Events & Submissions
                         </div>
-                        {userNotifications.map((n) => (
+                        {userNotifications.map((n) => {
+                          let targetUrl = n.link || "/teacher/dashboard";
+                          // Inspect the student if joined or messaged
+                          if (n.title?.includes("New Student Joined") || n.type === "new_student" || n.type === "classroom_entry") {
+                            const sId = n.senderId || n.studentId || n.metadata?.studentId;
+                            targetUrl = sId ? `/teacher/students/${sId}` : "/teacher/students";
+                          } else if (n.type === "message" || targetUrl === "/teacher/messages") {
+                            const sId = n.senderId || n.studentId || n.metadata?.studentId;
+                            targetUrl = sId ? `/teacher/students/${sId}` : "/teacher/dashboard?tab=inquiry";
+                          }
+                          return (
                           <Link
                             key={n.id || n._id}
-                            to={n.link || "/teacher/dashboard"}
+                            to={targetUrl}
                             onClick={() => setShowClassEntryPopup(false)}
                             style={{
                               display: "block",
@@ -609,7 +631,8 @@ function Navbar({ activeTab = "dashboard" }) {
                               {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Recent"} • Click to view
                             </div>
                           </Link>
-                        ))}
+                        );
+                        })}
                       </div>
                     )}
 
@@ -630,9 +653,12 @@ function Navbar({ activeTab = "dashboard" }) {
                       </div>
                     ) : (
                       classroomEntries.map((entry) => (
-                        <div
+                        <Link
                           key={entry.id}
+                          to={entry.studentId ? `/teacher/students/${entry.studentId}` : "/teacher/students"}
+                          onClick={() => setShowClassEntryPopup(false)}
                           style={{
+                            textDecoration: "none",
                             padding: "10px 12px",
                             borderRadius: "10px",
                             background: entry.read ? "#ffffff" : "#f5f3ff",
@@ -642,6 +668,8 @@ function Navbar({ activeTab = "dashboard" }) {
                             display: "flex",
                             alignItems: "flex-start",
                             gap: "10px",
+                            cursor: "pointer",
+                            transition: "all 0.15s ease",
                           }}
                         >
                           <div
@@ -662,8 +690,9 @@ function Navbar({ activeTab = "dashboard" }) {
                             {entry.studentName ? entry.studentName.charAt(0).toUpperCase() : "S"}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: "13px", fontWeight: "700", color: "#1e293b" }}>
-                              {entry.studentName}
+                            <div style={{ fontSize: "13px", fontWeight: "700", color: "#1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span>{entry.studentName}</span>
+                              <span style={{ fontSize: "11px", color: "#7c3aed", fontWeight: "700" }}>Inspect Student →</span>
                             </div>
                             <div style={{ fontSize: "11px", color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {entry.studentEmail}
@@ -672,7 +701,7 @@ function Navbar({ activeTab = "dashboard" }) {
                               Entered Classroom • {entry.timestamp} ({entry.date})
                             </div>
                           </div>
-                        </div>
+                        </Link>
                       ))
                     )}
                   </div>
@@ -1074,7 +1103,10 @@ function Navbar({ activeTab = "dashboard" }) {
               background: "#ffffff",
               borderRadius: "24px",
               width: "100%",
-              maxWidth: "520px",
+              maxWidth: "540px",
+              maxHeight: "90vh",
+              display: "flex",
+              flexDirection: "column",
               boxShadow: "0 25px 60px rgba(0,0,0,0.25)",
               border: "1px solid #e2e8f0",
               overflow: "hidden",
@@ -1147,7 +1179,7 @@ function Navbar({ activeTab = "dashboard" }) {
             )}
 
             {/* Modal Form */}
-            <form onSubmit={handleSaveTeacherProfile} style={{ padding: "28px" }}>
+            <form onSubmit={handleSaveTeacherProfile} style={{ padding: "28px", overflowY: "auto", flex: 1 }}>
               {/* Field 1: Teacher Name */}
               <div style={{ marginBottom: "18px" }}>
                 <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>

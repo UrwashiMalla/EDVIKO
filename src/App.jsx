@@ -204,6 +204,16 @@ function App() {
             }
           />
 
+          {/* Fallback route for teacher inquiry / direct messages */}
+          <Route
+            path="/teacher/messages"
+            element={
+              <ProtectedRoute role="teacher">
+                <Navigate to="/teacher/dashboard?tab=inquiry" replace />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Catch-all redirect */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

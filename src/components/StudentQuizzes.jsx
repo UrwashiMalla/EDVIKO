@@ -22,6 +22,18 @@ function StudentQuizzes() {
   const [searchParams] = useSearchParams();
   const urlQuizId = searchParams.get("quizId");
   const autoSolveAction = searchParams.get("action") === "solve";
+  const hasAutoLaunchedRef = useRef(false);
+
+  // Dedicated Close / Exit Handler that permanently clears params and state
+  const handleCloseModal = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setActiveQuiz(null);
+    setQuizSubmitted(false);
+    setQuizResult(null);
+    setSubmitError("");
+    hasAutoLaunchedRef.current = true;
+    setSearchParams({}, { replace: true });
+  };
 
   // Active Quiz Solver State
   const [activeQuiz, setActiveQuiz] = useState(null);
@@ -61,9 +73,10 @@ function StudentQuizzes() {
 
   // Auto-launch quiz solver when opened from notification or "Solve Now"
   useEffect(() => {
-    if (urlQuizId && quizzes.length > 0 && !activeQuiz) {
+    if (urlQuizId && quizzes.length > 0 && !activeQuiz && !hasAutoLaunchedRef.current) {
       const match = quizzes.find((q) => String(q._id || q.id) === String(urlQuizId));
       if (match) {
+        hasAutoLaunchedRef.current = true;
         if (match.hasAttempted) {
           handleViewResult(match);
         } else {
@@ -377,16 +390,23 @@ function StudentQuizzes() {
                     )}
 
                     <button
-                      onClick={() => setActiveQuiz(null)}
+                      type="button"
+                      onClick={handleCloseModal}
+                      title="Close and exit quiz"
                       style={{
                         background: "rgba(255, 255, 255, 0.2)",
                         border: "none",
                         borderRadius: "50%",
-                        width: "32px",
-                        height: "32px",
-                        color: "#fff",
+                        width: "36px",
+                        height: "36px",
+                        color: "#ffffff",
                         cursor: "pointer",
-                        fontSize: "14px",
+                        fontSize: "16px",
+                        fontWeight: "800",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        transition: "all 0.15s ease",
                       }}
                     >
                       ✕
@@ -735,11 +755,7 @@ function StudentQuizzes() {
                       <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
                         <button
                           type="button"
-                          onClick={() => {
-                            setActiveQuiz(null);
-                            setQuizSubmitted(false);
-                            setQuizResult(null);
-                          }}
+                          onClick={handleCloseModal}
                           style={{
                             padding: "12px 28px",
                             background: "linear-gradient(135deg, #7c3aed, #6d28d9)",

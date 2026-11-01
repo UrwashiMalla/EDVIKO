@@ -618,10 +618,10 @@ function StudentProfile() {
             </span>
           </div>
 
-          <form onSubmit={handleChangeClassroom} style={{ marginTop: "16px" }}>
-            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
-              <div style={{ flex: 1, minWidth: "220px" }}>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
+          <form onSubmit={handleChangeClassroom} className="classroom-switch-form">
+            <div className="classroom-switch-row">
+              <div className="classroom-input-wrap">
+                <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "#334155", marginBottom: "6px" }}>
                   Enter New Classroom Code
                 </label>
                 <input
@@ -631,18 +631,20 @@ function StudentProfile() {
                   onChange={(e) => setNewTeacherCode(e.target.value.toUpperCase())}
                   style={{
                     width: "100%",
-                    padding: "10px 14px",
+                    padding: "11px 14px",
                     borderRadius: "10px",
-                    border: "1px solid #d1d5db",
+                    border: "1.5px solid #cbd5e1",
                     fontSize: "14px",
+                    fontWeight: "600",
+                    boxSizing: "border-box",
                     outline: "none",
                   }}
                 />
               </div>
 
               {availableTeachers.length > 0 && (
-                <div style={{ flex: 1, minWidth: "220px" }}>
-                  <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
+                <div className="classroom-input-wrap">
+                  <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "#334155", marginBottom: "6px" }}>
                     Or Pick Available Faculty
                   </label>
                   <select
@@ -650,11 +652,13 @@ function StudentProfile() {
                     value={newTeacherCode}
                     style={{
                       width: "100%",
-                      padding: "10px 14px",
+                      padding: "11px 14px",
                       borderRadius: "10px",
-                      border: "1px solid #d1d5db",
+                      border: "1.5px solid #cbd5e1",
                       fontSize: "14px",
+                      fontWeight: "600",
                       background: "#fff",
+                      boxSizing: "border-box",
                       outline: "none",
                     }}
                   >
@@ -671,18 +675,7 @@ function StudentProfile() {
               <button
                 type="submit"
                 disabled={changingClassroom || !newTeacherCode.trim()}
-                style={{
-                  padding: "10px 22px",
-                  borderRadius: "10px",
-                  background: "linear-gradient(135deg, #7044e5, #4f46e5)",
-                  color: "#fff",
-                  fontWeight: 600,
-                  fontSize: "14px",
-                  border: "none",
-                  cursor: "pointer",
-                  height: "42px",
-                  opacity: changingClassroom || !newTeacherCode.trim() ? 0.6 : 1,
-                }}
+                className="classroom-switch-btn"
               >
                 {changingClassroom ? "Connecting..." : "Switch Classroom →"}
               </button>
@@ -690,33 +683,20 @@ function StudentProfile() {
           </form>
 
           {/* Classroom History Timeline */}
-          <div style={{ marginTop: "28px" }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 700, color: "#1e1b4b", marginBottom: "12px" }}>
-              Classroom & Teacher History
-            </h3>
+          <div className="history-timeline">
+            <h3>Classroom & Teacher History</h3>
             {classroomHistory && classroomHistory.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 {classroomHistory.map((item, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      padding: "12px 18px",
-                      borderRadius: "12px",
-                      background: "#f8fafc",
-                      border: "1px solid #e2e8f0",
-                      fontSize: "13px",
-                    }}
-                  >
+                  <div key={idx} className="history-card-item">
                     <div>
-                      <strong style={{ color: "#1e293b" }}>{item.teacherName || "Faculty Instructor"}</strong>
-                      <span style={{ color: "#64748b", marginLeft: "8px" }}>Code: {item.teacherCode}</span>
+                      <strong style={{ color: "#1e293b", fontSize: "14px" }}>{item.teacherName || "Faculty Instructor"}</strong>
+                      <span style={{ color: "#64748b", marginLeft: "8px", fontWeight: "600" }}>Code: {item.teacherCode}</span>
+                      {!item.leftAt && <span className="history-active-tag">Active</span>}
                     </div>
-                    <div style={{ color: "#64748b" }}>
+                    <div style={{ color: "#64748b", fontSize: "12px", fontWeight: "500" }}>
                       Joined: {new Date(item.joinedAt).toLocaleDateString()}
-                      {item.leftAt ? ` • Departed: ${new Date(item.leftAt).toLocaleDateString()}` : " (Active)"}
+                      {item.leftAt ? ` • Departed: ${new Date(item.leftAt).toLocaleDateString()}` : ""}
                     </div>
                   </div>
                 ))}

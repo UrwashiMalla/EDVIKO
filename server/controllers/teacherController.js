@@ -433,6 +433,10 @@ const removeStudentFromClass = async (req, res, next) => {
       });
     }
 
+    // Mark student as permanently removed so they cannot log in with this email
+    student.isRemoved = true;
+    await student.save();
+
     // Remove from active students array
     teacherProfile.students = teacherProfile.students.filter(
       (id) => id.toString() !== studentId.toString()
@@ -500,11 +504,29 @@ const unremoveStudentFromClass = async (req, res, next) => {
         r._id?.toString() !== studentId.toString()
     );
 
+    // Unlock student account so they can log in again
+    const student = await User.findById(studentId);
+    if (student) {
+      student.isRemoved = false;
+      await student.save();
+    }
+
+    // Reconnect student to teacher classroom so all their existing history and submissions are active
+    const studentProfile = await StudentProfile.findOne({ userId: studentId });
+    if (studentProfile) {
+      studentProfile.teacherId = teacherUserId;
+      studentProfile.classroomCode = teacherProfile.teacherCode;
+      await studentProfile.save();
+    }
+
+    if (!teacherProfile.students.some((sId) => sId.toString() === studentId.toString())) {
+      teacherProfile.students.push(studentId);
+    }
     await teacherProfile.save();
 
     res.json({
       success: true,
-      message: "Student unremoved successfully! They are now permitted to rejoin your classroom using your classroom code.",
+      message: "Student unremoved successfully! Their account has been unlocked and re-joined to your classroom with full historical records preserved.",
     });
   } catch (err) {
     next(err);
@@ -661,15 +683,18 @@ const sendDirectMessage = async (req, res, next) => {
 
     // Notify the recipient student in MongoDB
     try {
+      const isQuizReminder = req.body.type === "quiz_reminder";
+      const qId = req.body.quizId;
       await Notification.create({
         recipientId: student._id,
         senderId: req.user._id,
         senderName: req.user.name || "Faculty Instructor",
         classroomCode,
-        type: "message",
-        title: `💬 New Message from ${req.user.name || "Professor"}`,
+        type: isQuizReminder ? "quiz" : "message",
+        title: isQuizReminder ? `⏰ Quiz Reminder: ${req.body.quizTitle || "Classroom Quiz"}` : `💬 New Message from ${req.user.name || "Professor"}`,
         message: text.trim().slice(0, 140),
-        link: "/student/dashboard",
+        link: isQuizReminder && qId ? `/student/quizzes?quizId=${qId}&action=solve` : "/student/dashboard",
+        quizId: qId || null,
         isRead: false,
       });
     } catch (notifErr) {

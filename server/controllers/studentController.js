@@ -223,7 +223,7 @@ const changeClassroom = async (req, res, next) => {
         type: "general",
         title: "👋 New Student Joined Classroom",
         message: `${studentUser.name} (${studentUser.username || studentUser.email}) joined your classroom.`,
-        link: "/teacher/students",
+        link: `/teacher/students/${studentUser._id}`,
       });
     } catch (notifErr) {
       console.warn("Classroom change notification warning:", notifErr.message);
@@ -374,7 +374,7 @@ const sendDirectMessageToTeacher = async (req, res, next) => {
         type: "general",
         title: "💬 New Personal Message from Student",
         message: `${req.user.name}: "${text.trim().slice(0, 70)}${text.trim().length > 70 ? "..." : ""}"`,
-        link: `/teacher/messages`,
+        link: `/teacher/students/${req.user._id}`,
       });
     } catch (notifErr) {
       console.warn("Personal message notification warning:", notifErr.message);
