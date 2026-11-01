@@ -17,6 +17,7 @@ import {
   DEFAULT_STUDENTS_LIST,
   getRemovedStudentIds,
   getTeacherClassCode,
+  onLerniqSync,
 } from "../services/frontendStorage";
 import Navbar from "./Navbar";
 
@@ -56,6 +57,7 @@ function TeacherDashboard() {
 
   // Quick Toast
   const [toast, setToast] = useState("");
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -127,6 +129,18 @@ function TeacherDashboard() {
       }
     };
     loadRemoteDM();
+    const interval = setInterval(loadRemoteDM, 3000);
+
+    const unsubscribe = onLerniqSync((detail) => {
+      if (detail.type === "DIRECT_MESSAGE") {
+        loadRemoteDM();
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
   }, [selectedStudentForDM]);
 
   const teacherCode = dashboardData?.teacherProfile?.teacherCode || getTeacherClassCode(user?.id || user?._id || "default_teacher");
@@ -461,7 +475,29 @@ function TeacherDashboard() {
             <div style={{ fontSize: "28px", fontWeight: "800", letterSpacing: "2px", marginTop: "4px" }}>
               {teacherCode}
             </div>
-            <small style={{ fontSize: "11px", opacity: 0.8 }}>Share with students to auto-link</small>
+            <div style={{ marginTop: "6px", marginBottom: "4px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(teacherCode);
+                  setCopiedCode(true);
+                  setTimeout(() => setCopiedCode(false), 2000);
+                }}
+                style={{
+                  padding: "4px 10px",
+                  background: copiedCode ? "#dcfce7" : "rgba(255,255,255,0.25)",
+                  color: copiedCode ? "#15803d" : "#ffffff",
+                  border: "1px solid rgba(255,255,255,0.4)",
+                  borderRadius: "8px",
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                }}
+              >
+                {copiedCode ? "✓ Copied!" : "📋 Copy Code"}
+              </button>
+            </div>
+            <small style={{ fontSize: "11px", opacity: 0.8 }}>Share with students to join classroom</small>
           </div>
         </div>
 
@@ -1069,7 +1105,7 @@ function TeacherDashboard() {
                 <form onSubmit={handleTeacherReply} style={{ display: "flex", gap: "10px" }}>
                   <input
                     type="text"
-                    placeholder="Reply to Alex Smith..."
+                    placeholder={selectedStudentForDM ? `Reply personally to ${currentStudentObj.name || "Student"}...` : "Select a student to message..."}
                     value={teacherReplyText}
                     onChange={(e) => setTeacherReplyText(e.target.value)}
                     style={{ flex: 1, padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "13px" }}

@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   getDashboardStats,
   updateProfile,
+  changeClassroom,
   getClassroomBroadcasts,
   getDirectMessagesWithTeacher,
   sendDirectMessageToTeacher,
@@ -14,8 +15,9 @@ router.use(requireRole("student"));
 
 router.get("/me/dashboard", getDashboardStats);
 router.put("/me/profile", updateProfile);
+router.post("/classroom/change", changeClassroom);
 
-// Messaging: Classroom Broadcasts & Direct Messages
+// Messaging: Classroom Broadcasts & Personal Direct Messages
 router.get("/messages/broadcasts", getClassroomBroadcasts);
 router.get("/messages/direct", getDirectMessagesWithTeacher);
 router.post("/messages/direct", sendDirectMessageToTeacher);

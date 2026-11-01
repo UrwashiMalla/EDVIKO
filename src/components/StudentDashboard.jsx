@@ -40,11 +40,14 @@ function StudentDashboard() {
   const messagesEndRef = useRef(null);
 
   const studentKey = user?.id || user?._id || user?.email || "default_student";
+  const assignedTeacher = dashboardData?.profile?.teacherId;
+  const teacherDisplayName = assignedTeacher?.name || "Your Faculty Mentor";
+  const teacherCodeDisplay = dashboardData?.activeTeacherProfile?.teacherCode || dashboardData?.profile?.classroomCode || "Active Classroom";
 
   const loadAllMessages = async () => {
     // 1. Local fallback
     setBroadcasts(getTeacherBroadcasts());
-    setDirectMessages(getDirectMessages(studentKey));
+    setDirectMessages(getDirectMessages(studentKey, user?.email));
 
     // 2. Fetch remote broadcasts and messages from MongoDB
     try {
@@ -88,6 +91,11 @@ function StudentDashboard() {
           }),
         }));
         setDirectMessages(formattedDMs);
+      } else {
+        const local = getDirectMessages(studentKey, user?.email);
+        if (local.length > 0) {
+          setDirectMessages(local);
+        }
       }
     } catch (err) {
       console.warn("Could not sync remote messages:", err.message);
@@ -136,9 +144,13 @@ function StudentDashboard() {
   useEffect(() => {
     if (showMessageTeacherModal) {
       loadAllMessages();
+      const interval = setInterval(() => {
+        loadAllMessages();
+      }, 3000);
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);
+      return () => clearInterval(interval);
     }
   }, [showMessageTeacherModal, studentKey]);
 
@@ -759,7 +771,11 @@ function StudentDashboard() {
                 onClick={() => {
                   const link = activePopup.link;
                   handleDismissPopup(activePopup.id);
-                  if (link) navigate(link);
+                  if (activePopup.type === "message") {
+                    setShowMessageTeacherModal(true);
+                  } else if (link) {
+                    navigate(link);
+                  }
                 }}
                 style={{
                   padding: "8px 16px",
@@ -816,7 +832,7 @@ function StudentDashboard() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
               <div>
                 <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "1px", background: "#ede9fe", color: "#6d28d9", padding: "4px 10px", borderRadius: "8px" }}>
                   OFFICIAL NOTICES
@@ -828,24 +844,50 @@ function StudentDashboard() {
                   Updates and study guidance posted by your assigned faculty mentor.
                 </p>
               </div>
-              <button
-                onClick={() => setShowAnnouncementsModal(false)}
-                style={{
-                  background: "#f1f5f9",
-                  border: "none",
-                  borderRadius: "50%",
-                  width: "36px",
-                  height: "36px",
-                  fontSize: "16px",
-                  cursor: "pointer",
-                  color: "#64748b",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                ✕
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAnnouncementsModal(false);
+                    setShowMessageTeacherModal(true);
+                  }}
+                  style={{
+                    padding: "9px 16px",
+                    background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "12px",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    boxShadow: "0 4px 12px rgba(124, 58, 237, 0.25)",
+                  }}
+                >
+                  <span>💬 Message Teacher Personally</span>
+                  <span>→</span>
+                </button>
+                <button
+                  onClick={() => setShowAnnouncementsModal(false)}
+                  style={{
+                    background: "#f1f5f9",
+                    border: "none",
+                    borderRadius: "50%",
+                    width: "36px",
+                    height: "36px",
+                    fontSize: "16px",
+                    cursor: "pointer",
+                    color: "#64748b",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {broadcasts.length === 0 ? (
@@ -893,20 +935,118 @@ function StudentDashboard() {
                       {msg.content}
                     </p>
 
-                    <div style={{ fontSize: "12px", color: "#7c3aed", fontWeight: "600" }}>
-                      ✍️ Posted by: {msg.teacherName}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginTop: "14px", paddingTop: "12px", borderTop: "1px dashed rgba(124, 58, 237, 0.2)" }}>
+                      <div style={{ fontSize: "12px", color: "#7c3aed", fontWeight: "700" }}>
+                        ✍️ Posted by: {msg.teacherName}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAnnouncementsModal(false);
+                          setShowMessageTeacherModal(true);
+                        }}
+                        style={{
+                          padding: "6px 14px",
+                          background: "#ffffff",
+                          color: "#6d28d9",
+                          border: "1.5px solid #ddd6fe",
+                          borderRadius: "8px",
+                          fontSize: "12px",
+                          fontWeight: "700",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          transition: "all 0.2s ease",
+                        }}
+                      >
+                        <span>💬 Message Teacher Personally</span>
+                        <span>→</span>
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #f1f5f9", display: "flex", justifyContent: "flex-end" }}>
+            {/* Direct Message Teacher Action Card inside Announcements */}
+            <div
+              style={{
+                marginTop: "20px",
+                padding: "16px 20px",
+                borderRadius: "16px",
+                background: "linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)",
+                border: "1.5px solid #ddd6fe",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "16px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <h4 style={{ margin: "0 0 4px 0", color: "#5b21b6", fontSize: "14px", fontWeight: "800" }}>
+                  💬 Have a question about this notice?
+                </h4>
+                <p style={{ margin: 0, color: "#6d28d9", fontSize: "12px" }}>
+                  Send a private 1-on-1 message directly to your assigned faculty mentor.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAnnouncementsModal(false);
+                  setShowMessageTeacherModal(true);
+                }}
+                style={{
+                  padding: "9px 18px",
+                  background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "10px",
+                  fontWeight: "700",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 4px 12px rgba(124, 58, 237, 0.25)",
+                }}
+              >
+                <span>Message Teacher Personally</span>
+                <span>→</span>
+              </button>
+            </div>
+
+            <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAnnouncementsModal(false);
+                  setShowMessageTeacherModal(true);
+                }}
+                style={{
+                  padding: "10px 18px",
+                  background: "#ede9fe",
+                  color: "#6d28d9",
+                  border: "1.5px solid #ddd6fe",
+                  borderRadius: "10px",
+                  fontSize: "13px",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <span>💬 Message Teacher Personally</span>
+                <span>→</span>
+              </button>
               <button
                 onClick={() => setShowAnnouncementsModal(false)}
                 style={{
                   padding: "10px 20px",
-                  background: "#6d28d9",
+                  background: "#64748b",
                   color: "#fff",
                   border: "none",
                   borderRadius: "10px",
@@ -966,10 +1106,10 @@ function StudentDashboard() {
                   PRIVATE FACULTY CONVERSATION
                 </span>
                 <h2 style={{ fontSize: "20px", fontWeight: "800", margin: "6px 0 2px 0" }}>
-                  💬 Message Prof. Sarah Jenkins
+                  💬 Message {teacherDisplayName}
                 </h2>
                 <div style={{ fontSize: "13px", opacity: 0.9 }}>
-                  Direct Mentor Channel • Faculty Code: TEACH-101
+                  Direct Mentor Channel • Classroom Code: {teacherCodeDisplay}
                 </div>
               </div>
               <button
@@ -1055,9 +1195,12 @@ function StudentDashboard() {
                           fontWeight: "600",
                           display: "flex",
                           gap: "6px",
+                          alignItems: "center",
                         }}
                       >
-                        <span>{isMe ? "You" : msg.senderName}</span>
+                        <span style={{ color: isMe ? "#7c3aed" : "#1e293b", fontWeight: "700" }}>
+                          {isMe ? "You (Student)" : `🎓 ${msg.senderName || "Faculty Mentor"} (Teacher)`}
+                        </span>
                         <span>•</span>
                         <span>{msg.timestamp}</span>
                       </div>
@@ -1070,8 +1213,8 @@ function StudentDashboard() {
                           color: isMe ? "#ffffff" : "#1e293b",
                           fontSize: "14px",
                           lineHeight: "1.5",
-                          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)",
-                          border: isMe ? "none" : "1px solid #ede9fe",
+                          boxShadow: isMe ? "0 4px 14px rgba(124, 58, 237, 0.25)" : "0 4px 12px rgba(0, 0, 0, 0.05)",
+                          border: isMe ? "none" : "1.5px solid #ede9fe",
                         }}
                       >
                         {msg.text}

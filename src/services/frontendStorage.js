@@ -265,12 +265,38 @@ export const deleteTeacherBroadcast = (id) => {
 // ==========================================
 const DEFAULT_DIRECT_MESSAGES = [];
 
-export const getDirectMessages = (studentKey = "") => {
-  if (!studentKey) return [];
+export const getDirectMessages = (studentKey = "", studentEmail = "") => {
+  if (!studentKey && !studentEmail) return [];
   try {
-    const cleanKey = String(studentKey).toLowerCase();
-    const data = localStorage.getItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${cleanKey}`);
-    return data ? JSON.parse(data) : [];
+    const keysToCheck = [];
+    if (studentKey) keysToCheck.push(String(studentKey).toLowerCase());
+    if (studentEmail && String(studentEmail).toLowerCase() !== String(studentKey).toLowerCase()) {
+      keysToCheck.push(String(studentEmail).toLowerCase());
+    }
+
+    let allMessages = [];
+    const seenIds = new Set();
+
+    for (const key of keysToCheck) {
+      const data = localStorage.getItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${key}`);
+      if (data) {
+        try {
+          const list = JSON.parse(data);
+          if (Array.isArray(list)) {
+            for (const item of list) {
+              const id = item.id || (item._id ? String(item._id) : null);
+              if (id && !seenIds.has(id)) {
+                seenIds.add(id);
+                allMessages.push(item);
+              } else if (!id) {
+                allMessages.push(item);
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+    return allMessages;
   } catch {
     return [];
   }
@@ -297,9 +323,9 @@ export const sendDirectMessage = (studentKey = "", { senderRole, senderName, tex
     }),
   };
   const updated = [...current, newMsg];
-  localStorage.setItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${cleanKey}`, JSON.stringify(updated));
-
-  // Also cache under email if available so lookup by either ID or email succeeds
+  if (cleanKey) {
+    localStorage.setItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${cleanKey}`, JSON.stringify(updated));
+  }
   if (studentEmail && String(studentEmail).toLowerCase() !== cleanKey) {
     localStorage.setItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${String(studentEmail).toLowerCase()}`, JSON.stringify(updated));
   }

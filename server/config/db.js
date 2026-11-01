@@ -22,6 +22,17 @@ const connectDB = async () => {
         fs.mkdirSync(dbDir, { recursive: true });
       }
 
+      // Clean stale lock files if left behind by interrupted process
+      const lockFiles = ["mongod.lock", "WiredTiger.lock"];
+      lockFiles.forEach((f) => {
+        const lp = path.join(dbDir, f);
+        try {
+          if (fs.existsSync(lp)) {
+            fs.unlinkSync(lp);
+          }
+        } catch {}
+      });
+
       memoryServer = await MongoMemoryServer.create({
         instance: {
           dbPath: dbDir,
@@ -34,17 +45,36 @@ const connectDB = async () => {
       console.log(`✅ Persistent Fallback MongoDB Connected at: ${memoryUri} (Database: lerniq)`);
       return conn;
     } catch (memErr) {
-      console.error("❌ Failed to initialize persistent fallback MongoDB:", memErr.message);
-      process.exit(1);
+      console.warn("⚠️ Persistent DB lock/init issue. Falling back to clean in-memory Mongo:", memErr.message);
+      try {
+        const { MongoMemoryServer } = require("mongodb-memory-server");
+        memoryServer = await MongoMemoryServer.create({
+          instance: {
+            dbName: "lerniq",
+          },
+        });
+        const memoryUri = memoryServer.getUri();
+        const conn = await mongoose.connect(memoryUri, { dbName: "lerniq" });
+        console.log(`✅ Clean In-Memory Fallback MongoDB Connected at: ${memoryUri} (Database: lerniq)`);
+        return conn;
+      } catch (err2) {
+        console.error("❌ Failed to initialize fallback MongoDB:", err2.message);
+        process.exit(1);
+      }
     }
   }
 };
 
-process.on("SIGINT", async () => {
+const cleanup = async () => {
   if (memoryServer) {
-    await memoryServer.stop();
+    try {
+      await memoryServer.stop();
+    } catch {}
   }
   process.exit(0);
-});
+};
+
+process.on("SIGINT", cleanup);
+process.on("SIGTERM", cleanup);
 
 module.exports = connectDB;

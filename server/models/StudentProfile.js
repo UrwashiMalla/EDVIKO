@@ -8,10 +8,19 @@ const studentProfileSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    username: {
+      type: String,
+      trim: true,
+    },
     teacherId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
+    },
+    classroomCode: {
+      type: String,
+      default: "",
+      trim: true,
     },
     gradeOrClass: {
       type: String,
@@ -21,6 +30,27 @@ const studentProfileSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    classroomHistory: [
+      {
+        teacherId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        teacherCode: {
+          type: String,
+        },
+        teacherName: {
+          type: String,
+        },
+        joinedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        leftAt: {
+          type: Date,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
