@@ -763,7 +763,7 @@ function TeacherDocuments() {
                       <span>{isUploadingFile ? "⏳ Reading Document..." : "📁 Upload Document"}</span>
                       <input
                         type="file"
-                        accept=".pdf,.docx,.doc,.txt,.text"
+                        accept=".pdf,.docx,.doc,.txt,.text,.md,.py,.js,.jsx,.ts,.tsx,.java,.cpp,.c,.cs,.html,.css,.sql,.php,.go,.rs,.rb,.sh,.xml,.yaml,.yml,.jpg,.jpeg,.png,.webp,image/*"
                         onChange={handleNotesFileUpload}
                         disabled={isUploadingFile}
                         style={{ display: "none" }}
@@ -1440,10 +1440,10 @@ function TeacherDocuments() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <label style={{ fontSize: "13px", fontWeight: "600", color: "#64748b", cursor: "pointer" }}>
-                      📎 Attach Document / PDF File:{" "}
+                      📎 Attach Document / PDF / Code / Image:{" "}
                       <input
                         type="file"
-                        accept=".pdf,.docx,.txt"
+                        accept=".pdf,.docx,.doc,.txt,.text,.md,.py,.js,.jsx,.ts,.tsx,.java,.cpp,.c,.cs,.html,.css,.sql,.php,.go,.rs,.rb,.sh,.xml,.yaml,.yml,.jpg,.jpeg,.png,.webp,image/*"
                         onChange={handleNoteFileChange}
                         style={{ fontSize: "12px", marginLeft: "6px" }}
                       />

@@ -6,7 +6,7 @@ import mammoth from "mammoth/mammoth.browser";
 import { documentApi } from "../services/api";
 import Navbar from "./Navbar";
 import { recognizeImageQuestion } from "../utils/imageOcrHelper";
-import { extractTextFromFile } from "../utils/documentExtractor";
+import { extractTextFromFile, getFileCategory } from "../utils/documentExtractor";
 
 import "./LearningWorkspace.css";
 
@@ -165,13 +165,7 @@ function LearningWorkspace({ onBack, onStartLearning }) {
         ? selectedFile.name.replace(/\.[^/.]+$/, "")
         : extractedText.trim().slice(0, 40) + "...";
 
-      let fType = "text";
-      if (selectedFile) {
-        const lowerName = selectedFile.name.toLowerCase();
-        if (lowerName.endsWith(".docx")) fType = "docx";
-        else if (lowerName.endsWith(".pdf")) fType = "pdf";
-        else fType = "other"; // Valid in backend schema enum: ["pdf", "docx", "text", "other"]
-      }
+      const fType = selectedFile ? getFileCategory(selectedFile) : "text";
 
       const res = await documentApi.create({
         title: docTitle,
@@ -253,7 +247,7 @@ function LearningWorkspace({ onBack, onStartLearning }) {
               className={`workspace-tab ${activeTab === "upload" ? "active" : ""}`}
               onClick={() => setActiveTab("upload")}
             >
-              ☁️ Upload File (PDF, DOCX, JPEG, PNG)
+              ☁️ Upload File (PDF, DOCX, Code, Images, Notes)
             </button>
 
             <button
@@ -277,13 +271,13 @@ function LearningWorkspace({ onBack, onStartLearning }) {
               <div className="upload-icon">☁️</div>
 
               <h2>Upload your study material</h2>
-              <p>PDF, DOCX, JPEG, and PNG image files are supported</p>
+              <p>PDF, DOCX, Code files, Images, and Text notes are supported</p>
 
               <label className="upload-button">
                 Choose File
                 <input
                   type="file"
-                  accept=".pdf,.docx,.jpg,.jpeg,.png,image/jpeg,image/png"
+                  accept=".pdf,.docx,.doc,.txt,.md,.rtf,.csv,.json,.py,.js,.jsx,.ts,.tsx,.java,.cpp,.c,.cs,.html,.css,.sql,.php,.go,.rs,.rb,.sh,.xml,.yaml,.yml,.jpg,.jpeg,.png,.webp,image/*"
                   onChange={handleFileChange}
                   hidden
                 />

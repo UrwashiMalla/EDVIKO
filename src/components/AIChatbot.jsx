@@ -7,7 +7,7 @@ import { useAuth } from "../context/useAuth";
 import { documentApi, aiApi } from "../services/api";
 import { isNonStudyQuery, getAcademicRefusalMessage } from "../utils/academicGuardrail";
 import { recognizeImageQuestion } from "../utils/imageOcrHelper";
-import { extractTextFromFile } from "../utils/documentExtractor";
+import { extractTextFromFile, getFileCategory } from "../utils/documentExtractor";
 import Navbar from "./Navbar";
 import MarkdownRenderer from "./MarkdownRenderer";
 import "./AIChatbot.css";
@@ -132,7 +132,7 @@ Could you help me understand this problem?`);
     }
   };
 
-  // Handle direct PDF/Doc upload in chat
+  // Handle direct PDF/Doc/Code/Image upload in chat
   const handleDocUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -141,7 +141,7 @@ Could you help me understand this problem?`);
     setDocUploadStatus(`Reading and extracting "${file.name}"...`);
 
     try {
-      const lowerName = file.name.toLowerCase();
+      const fileCategory = getFileCategory(file);
       const extracted = await extractTextFromFile(file, (status) => {
         setDocUploadStatus(status);
       });
@@ -151,7 +151,7 @@ Could you help me understand this problem?`);
       const saveRes = await documentApi.create({
         title: file.name.replace(/\.[^/.]+$/, ""),
         originalFileName: file.name,
-        fileType: lowerName.endsWith(".docx") || lowerName.endsWith(".doc") ? "docx" : (lowerName.endsWith(".pdf") ? "pdf" : "text"),
+        fileType: fileCategory,
         fileSize: file.size,
         extractedText: extracted,
       });
@@ -167,11 +167,21 @@ Could you help me understand this problem?`);
       setDocuments((prev) => [newDocObj, ...prev.filter((d) => d.id !== newDocId)]);
       setSelectedContext(newDocId);
 
+      // Tailored confirmation message based on file category
+      let uploadConfirmMsg = "";
+      if (fileCategory === "code") {
+        uploadConfirmMsg = `💻 **"${file.name}"** successfully upload ho gayi hai! 🚀\n\nAb bata bhai, is code ke baare mein kya janna hai? Tu pooch sakta hai:\n• **"is code ka logic samjha"**\n• **"bugs ya errors check kar"**\n• **"time aur space complexity bata"**\n• **"optimize kaise karein?"** 😄`;
+      } else if (fileCategory === "image") {
+        uploadConfirmMsg = `🖼️ **"${file.name}"** successfully upload aur OCR process ho gayi hai! 🔍\n\nAb bata bhai, is image / diagram mein se kya seekhna hai? Tu pooch sakta hai:\n• **"image me kya likha hai samjha"**\n• **"is question ko step-by-step solve karo"** 😄`;
+      } else {
+        uploadConfirmMsg = `📄 **"${file.name}"** successfully upload aur process ho gayi hai! 🎉\n\nAb bata bhai, kya sunna ya padhna hai? Tu pooch sakta hai:\n• **"bhai pdf suna"** (main poori file ka overview aur concepts samjha doonga)\n• **"is document ke important exam questions bata"**\n• Ya koi bhi specific topic pooch le! 😄`;
+      }
+
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: `📄 **"${file.name}"** successfully upload aur process ho gayi hai! 🎉\n\nAb bata bhai, kya sunna ya padhna hai? Tu pooch sakta hai:\n• **"bhai pdf suna"** (main poori PDF ka overview aur main concepts samjha doonga)\n• **"is PDF ke important exam questions bata"**\n• Ya koi bhi specific topic pooch le! 😄`,
+          content: uploadConfirmMsg,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
@@ -221,8 +231,8 @@ Could you help me understand this problem?`);
       const apiKey = import.meta.env.VITE_GROQ_API_KEY;
       let contextText = "";
 
-      // Check if user's question is asking to narrate/explain/summarize a PDF or notes
-      const isPdfOrDocQuery = /\b(pdf|document|file|notes|kitab|suna|sunao|samjha|kya hai|explain|overview|summary|batao|bata)\b/i.test(text);
+      // Check if user's question is asking to narrate/explain/summarize/debug a PDF, doc, code, or image
+      const isDocOrStudyQuery = /\b(pdf|document|doc|docx|file|notes|code|coding|program|script|image|photo|diagram|kitab|suna|sunao|samjha|kya hai|explain|overview|summary|batao|bata|bug|bugs|error|logic)\b/i.test(text);
 
       let currentContextId = selectedContext;
       let currentDocuments = documents;
@@ -262,18 +272,18 @@ Could you help me understand this problem?`);
         }
       }
 
-      // If user explicitly asks "bhai pdf suna" or asks about PDF, but no document is found anywhere
-      if (isPdfOrDocQuery && (!contextText || !contextText.trim()) && currentDocuments.length === 0) {
+      // If user explicitly asks about their file/pdf/notes/code, but no document is found anywhere
+      if (isDocOrStudyQuery && (!contextText || !contextText.trim()) && currentDocuments.length === 0) {
         setTimeout(() => {
           setMessages((prev) => [
             ...prev,
             {
               role: "assistant",
-              content: `Arre bhai! 😄 Lagta hai abhi tune koi PDF ya study notes upload nahi kiye hain.
+              content: `Arre bhai! 😄 Lagta hai abhi tune koi PDF, Code file, Image, ya study notes upload nahi kiye hain.
 
-Niche chat bar mein 📄 **Upload PDF / Doc** button par click karke apni PDF upload kar de, ya fir **Workspace** me upload kar le. 
+Niche chat bar mein 📁 **Upload Doc / Code / Image** button par click karke apni file (PDF, DOCX, Code, Image ya Text) upload kar de, ya fir **Workspace** me upload kar le. 
 
-Upload hote hi bolna *"bhai pdf suna"* — main poora content aur important concepts detail me samjha doonga! 🚀`,
+Upload hote hi bolna *"bhai file samjha"* ya *"bhai pdf suna"* — main poora content, code logic, aur important concepts detail me samjha doonga! 🚀`,
               timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             },
           ]);
@@ -317,17 +327,22 @@ Upload hote hi bolna *"bhai pdf suna"* — main poora content aur important conc
 - Accuracy: Never fabricate facts or citations. Correct false premises respectfully ("Achha ek chhota sa correction hai yahan...").
 - Language: You MUST write your entire response strictly in ${langInstruction}.
 
-6. PDF & STUDY MATERIAL QUERIES ("bhai pdf suna", "pdf me kya hai", "meri pdf samjha", etc.):
-- Whenever the student asks to "suna", explain, summarize, or describe their uploaded PDF/document/notes (e.g. "bhai pdf suna", "pdf me kya hai?", "meri pdf samjha de", "tell me about my pdf", "explain this file", "is pdf ka content bata"):
-  • Treat the provided [Uploaded Study Material Context] as their uploaded PDF.
-  • Start with a warm, natural tutor opening: "Haan bhai! Tere uploaded PDF/notes mein ye main topics aur concepts hain: 😄" (or matching language).
-  • Deliver a structured breakdown:
-    1. 📌 **Overview & Main Topic**: What this document is about.
-    2. 🔑 **Core Concepts & Key Points**: Clear, step-by-step breakdown of the main ideas.
-    3. ⚡ **Formulas, Definitions & Key Terms**: High-yield terms to remember.
-    4. 🎯 **Exam / Viva Highlights**: What questions might be asked from this.
-    5. Conclude with a helpful check: "Bata isme se kaunsa topic detail me samjhau ya koi numerical solve karein? 😄"
-  • NEVER claim you cannot read or don't have access to the PDF when study material context is provided.
+6. PDF, CODE FILES, IMAGES & STUDY MATERIAL QUERIES ("bhai pdf suna", "code samjha", "file me kya hai", "meri pdf samjha", etc.):
+- Whenever the student asks to "suna", explain, summarize, debug, or describe their uploaded PDF/document/code/image/notes (e.g. "bhai pdf suna", "code samjha de", "pdf me kya hai?", "meri file samjha de", "tell me about my file", "is code ka logic bata", "bugs dhoondho"):
+  • Treat the provided [Uploaded Study Material Context] as their uploaded file/document/code.
+  • If it is a code file (Python, C++, Java, JS, HTML, SQL, etc.):
+    - Clearly explain what the code does, its architecture, and algorithmic logic step-by-step.
+    - Highlight inputs, outputs, functions, and key libraries used.
+    - Check for edge cases, potential bugs, time/space complexity (Big-O), and suggest improvements.
+  • If it is a PDF / Document / Notes / Image:
+    - Start with a warm, natural tutor opening: "Haan bhai! Tere uploaded study material mein ye main topics aur concepts hain: 😄" (or matching language).
+    - Deliver a structured breakdown:
+      1. 📌 Overview & Main Topic: What this document/file is about.
+      2. 🔑 Core Concepts & Key Points: Clear, step-by-step breakdown of the main ideas.
+      3. ⚡ Formulas, Definitions & Key Terms / Key Code Constructs.
+      4. 🎯 Exam / Viva / Interview Highlights.
+      5. Conclude with a helpful check: "Bata isme se kaunsa topic ya section detail me samjhau? 😄"
+  • NEVER claim you cannot read or don't have access to the file when study material context is provided.
 ${contextText ? `\n\n[Uploaded Study Material Context]:\n${contextText.slice(0, 12000)}` : ""}`;
 
       const conversationPayload = [
@@ -588,17 +603,17 @@ ${contextText ? `\n\n[Uploaded Study Material Context]:\n${contextText.slice(0, 
 
           {/* INPUT BAR */}
           <div className="ai-chat-input-bar">
-            {/* Upload PDF or Document Button */}
+            {/* Upload PDF, Document, Code, or Image Button */}
             <label
               className={`chat-upload-btn pdf-upload-btn ${isUploadingDoc || isLoading ? "disabled" : ""}`}
-              title="Upload PDF, DOCX, or text notes directly into chat"
+              title="Upload PDF, DOCX, Code files (.py, .js, .cpp, .java, etc.), Images, or Text notes"
             >
-              <span>📄</span>
-              <span className="hide-on-mobile">{isUploadingDoc ? "Extracting..." : "Upload PDF / Doc"}</span>
+              <span>📁</span>
+              <span className="hide-on-mobile">{isUploadingDoc ? "Extracting..." : "Upload File / Code / Doc"}</span>
               <input
                 ref={docFileInputRef}
                 type="file"
-                accept=".pdf,.docx,.txt"
+                accept=".pdf,.docx,.doc,.txt,.md,.rtf,.csv,.json,.py,.js,.jsx,.ts,.tsx,.java,.cpp,.c,.cs,.html,.css,.sql,.php,.go,.rs,.rb,.sh,.xml,.yaml,.yml,.jpg,.jpeg,.png,.webp,image/*"
                 onChange={handleDocUpload}
                 disabled={isUploadingDoc || isLoading}
                 style={{ display: "none" }}

@@ -33,6 +33,10 @@ const createDocument = async (req, res, next) => {
     const stats = getStats(validation.cleanedText);
     const docTitle = title && title.trim() ? title.trim() : (originalFileName || "Untitled Study Document");
     const isTeacher = req.user.role === "teacher";
+    const validFileTypes = ["pdf", "docx", "text", "code", "image", "other"];
+    const normalizedFileType = validFileTypes.includes((fileType || "").toLowerCase())
+      ? fileType.toLowerCase()
+      : "other";
 
     const document = await Document.create({
       studentId: req.user._id,
@@ -40,7 +44,7 @@ const createDocument = async (req, res, next) => {
       isTeacherMaterial: isTeacher,
       title: docTitle,
       originalFileName: originalFileName || (isTeacher ? "faculty_handout.pdf" : "document.pdf"),
-      fileType: (fileType || "pdf").toLowerCase(),
+      fileType: normalizedFileType,
       fileSize: fileSize || 0,
       extractedText: validation.cleanedText,
       wordCount: stats.wordCount,

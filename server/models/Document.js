@@ -30,7 +30,7 @@ const documentSchema = new mongoose.Schema(
     },
     fileType: {
       type: String,
-      enum: ["pdf", "docx", "text", "other"],
+      enum: ["pdf", "docx", "text", "code", "image", "other"],
       default: "pdf",
     },
     fileSize: {
