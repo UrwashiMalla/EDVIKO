@@ -154,7 +154,7 @@ function StudentOTP() {
 
           <div className="otp-email">{email || "your email address"}</div>
           <p style={{ fontSize: "13px", color: "#7c3aed", margin: "6px 0 16px 0", fontWeight: 500 }}>
-            Sent from: <b>pandeaditya786@gmail.com</b> (Please check Inbox & Spam)
+            Sent by: <b>EDVIKO Verification Service</b> (Please check Inbox & Spam)
           </p>
 
           {/* OTP BOXES */}
@@ -220,7 +220,7 @@ function StudentOTP() {
             <div>
               <strong>Email Verification</strong>
               <p>
-                Check your inbox for mail from <b>pandeaditya786@gmail.com</b>. If not visible, check spam folder. (Dev code: <b>123456</b>)
+                Check your inbox for the 6-digit code. If not in inbox, please check your spam folder. (Dev code: <b>123456</b>)
               </p>
             </div>
           </div>

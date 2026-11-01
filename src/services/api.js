@@ -12,16 +12,42 @@ export const apiRequest = async (endpoint, options = {}) => {
     ...options.headers,
   };
 
-  const token = localStorage.getItem("lerniq_token");
+  const token = localStorage.getItem("edviko_token") || localStorage.getItem("lerniq_token");
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-    credentials: "include", // send cookies
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+      credentials: "include", // send cookies
+    });
+  } catch (networkErr) {
+    // If running in development and relative call failed, attempt fallback to localhost:5000
+    if (!BASE_URL && typeof window !== "undefined" && window.location.hostname === "localhost") {
+      try {
+        response = await fetch(`http://localhost:5000${endpoint}`, {
+          ...options,
+          headers,
+          credentials: "include",
+        });
+      } catch {
+        const error = new Error("Unable to connect to EDVIKO server. Please ensure the backend is running at http://localhost:5000.");
+        error.isNetworkError = true;
+        throw error;
+      }
+    } else {
+      const error = new Error(
+        networkErr.message === "Failed to fetch"
+          ? `Unable to connect to EDVIKO server at ${BASE_URL || "http://localhost:5000"}. Please ensure the backend is running.`
+          : networkErr.message
+      );
+      error.isNetworkError = true;
+      throw error;
+    }
+  }
 
   let data;
   try {
@@ -111,9 +137,15 @@ export const studentApi = {
   getDashboard: () => apiRequest("/api/students/me/dashboard"),
   updateProfile: (body) => apiRequest("/api/students/me/profile", { method: "PUT", body: JSON.stringify(body) }),
   changeClassroom: (body) => apiRequest("/api/students/classroom/change", { method: "POST", body: JSON.stringify(body) }),
+  joinClassroom: (body) => apiRequest("/api/students/classroom/join", { method: "POST", body: JSON.stringify(body) }),
+  validateClassroom: (body) => apiRequest("/api/students/classroom/validate", { method: "POST", body: JSON.stringify(body) }),
+  getClassrooms: () => apiRequest("/api/students/classrooms"),
+  switchClassroom: (body) => apiRequest("/api/students/classroom/switch", { method: "POST", body: JSON.stringify(body) }),
   getBroadcasts: () => apiRequest("/api/students/messages/broadcasts"),
   getDirectMessages: () => apiRequest("/api/students/messages/direct"),
   sendDirectMessage: (body) => apiRequest("/api/students/messages/direct", { method: "POST", body: JSON.stringify(body) }),
+  getLectures: () => apiRequest("/api/students/lectures"),
+  getNotes: () => apiRequest("/api/students/notes"),
 };
 
 export const teacherApi = {
@@ -131,4 +163,13 @@ export const teacherApi = {
   getConversations: () => apiRequest("/api/teachers/conversations"),
   sendDirectMessage: (studentId, body) => apiRequest(`/api/teachers/students/${studentId}/message`, { method: "POST", body: JSON.stringify(body) }),
   getDirectMessages: (studentId) => apiRequest(`/api/teachers/students/${studentId}/messages`),
+  createClassroom: (body) => apiRequest("/api/teachers/classroom", { method: "POST", body: JSON.stringify(body) }),
+  regenerateClassroomCode: (body) => apiRequest("/api/teachers/classroom/regenerate-code", { method: "POST", body: JSON.stringify(body) }),
+  getClassrooms: () => apiRequest("/api/teachers/classrooms"),
+  createLecture: (body) => apiRequest("/api/teachers/lectures", { method: "POST", body: JSON.stringify(body) }),
+  getLectures: (params = "") => apiRequest(`/api/teachers/lectures${params ? `?${params}` : ""}`),
+  deleteLecture: (id) => apiRequest(`/api/teachers/lectures/${id}`, { method: "DELETE" }),
+  createNote: (body) => apiRequest("/api/teachers/notes", { method: "POST", body: JSON.stringify(body) }),
+  getNotes: (params = "") => apiRequest(`/api/teachers/notes${params ? `?${params}` : ""}`),
+  deleteNote: (id) => apiRequest(`/api/teachers/notes/${id}`, { method: "DELETE" }),
 };

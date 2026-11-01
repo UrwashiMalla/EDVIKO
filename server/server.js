@@ -39,8 +39,14 @@ app.use(
   })
 );
 
+const clientUrls = (process.env.CLIENT_URL || "")
+  .split(",")
+  .map((u) => u.trim())
+  .filter(Boolean);
+
 const allowedOrigins = [
-  process.env.CLIENT_URL || "http://localhost:5173",
+  ...clientUrls,
+  "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:3000",
   "http://127.0.0.1:5173",
@@ -49,11 +55,11 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // allow requests with no origin (like mobile apps, curl, or Postman)
-      if (!origin || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(null, true); // permissive for local dev environments
+      // Allow requests with no origin (like mobile apps, curl, or Postman)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      // In production, allow matched origin or permissive for preview environments
+      return callback(null, true);
     },
     credentials: true,
   })
@@ -66,14 +72,16 @@ app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 // ==========================================
 // HEALTH CHECK
 // ==========================================
-app.get("/", (req, res) => {
+const healthHandler = (req, res) => {
   res.json({
     success: true,
-    platform: "LERNIQ AI Educational Platform",
+    platform: "EDVIKO AI Educational Platform",
     status: "online",
     timestamp: new Date().toISOString(),
   });
-});
+};
+app.get("/", healthHandler);
+app.get("/api/health", healthHandler);
 
 // ==========================================
 // API ROUTES
@@ -95,7 +103,7 @@ app.use(errorHandler);
 // START SERVER
 // ==========================================
 const server = app.listen(PORT, () => {
-  console.log(`🚀 LERNIQ production-ready backend listening on port ${PORT}`);
+  console.log(`🚀 EDVIKO production-ready backend listening on port ${PORT}`);
 });
 
 module.exports = { app, server };

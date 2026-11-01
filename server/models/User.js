@@ -41,6 +41,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isApproved: {
+      type: Boolean,
+      default: true,
+    },
     isRemoved: {
       type: Boolean,
       default: false,

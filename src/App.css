@@ -899,14 +899,18 @@ input {
 
 .signup-button {
   border: none;
-
   background: transparent;
-
   color: #7044e5;
-
-  font-weight: 600;
-
+  font-weight: 700;
+  font-size: 13.5px;
   cursor: pointer;
+  text-decoration: underline;
+  margin-left: 4px;
+  transition: color 0.2s ease;
+}
+
+.signup-button:hover {
+  color: #5b21b6;
 }
 
 

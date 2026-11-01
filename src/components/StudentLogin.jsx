@@ -28,7 +28,7 @@ function StudentLogin() {
     setSuccessNotice("");
 
     if (!username || !password) {
-      setErrorMessage("Please enter both Username/Email and password.");
+      setErrorMessage("Please enter both Email/Username and password.");
       return;
     }
 
@@ -46,7 +46,7 @@ function StudentLogin() {
 
       const res = await loginStudent(finalId, password);
 
-      // Log student entering class so teacher gets real-time notification
+      // Log student entering class
       logClassroomEntry({
         studentId: res?.user?.id || finalId,
         studentName: res?.user?.name || username.trim(),
@@ -87,7 +87,7 @@ function StudentLogin() {
             <span>Future Achiever! 🚀</span>
           </h1>
           <p>
-            Continue your learning journey, practice your skills, and achieve your academic goals.
+            Continue your learning journey on EDVIKO, practice with smart AI tutors, and track your classroom growth.
           </p>
         </div>
 
@@ -113,9 +113,9 @@ function StudentLogin() {
         </button>
 
         <div className="login-card-content">
-          <p className="login-hello">Hello Student 👋</p>
-          <h2>Student Login</h2>
-          <p className="login-subtitle">Access your personalized learning dashboard</p>
+          <p className="login-hello">Hello Learner 👋</p>
+          <h2>Welcome Back!</h2>
+          <p className="login-subtitle">Enter your credentials to access your student space</p>
 
           {successNotice && (
             <motion.div
@@ -126,9 +126,9 @@ function StudentLogin() {
                 padding: "10px 14px",
                 borderRadius: "10px",
                 background: "#f0fdf4",
-                color: "#166534",
-                fontSize: "14px",
-                fontWeight: 600,
+                color: "#15803d",
+                fontSize: "13px",
+                fontWeight: 500,
                 border: "1px solid #bbf7d0",
               }}
             >
@@ -148,6 +148,7 @@ function StudentLogin() {
                 color: "#b91c1c",
                 fontSize: "14px",
                 fontWeight: 500,
+                border: "1px solid #fecaca",
               }}
             >
               ⚠️ {errorMessage}
@@ -156,22 +157,21 @@ function StudentLogin() {
 
           {/* Login Form */}
           <form onSubmit={handleLogin}>
-            {/* Email */}
             <div className="input-group">
-              <label>Username</label>
+              <label>Email or Username</label>
               <div className="input-wrapper">
                 <span>🆔</span>
                 <input
                   type="text"
-                  placeholder="Enter your Username (e.g. rahul123)"
+                  placeholder="Enter your Email or Username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
+                  autoFocus
                 />
               </div>
             </div>
 
-            {/* Password */}
             <div className="input-group">
               <label>Password</label>
               <div className="input-wrapper">
@@ -186,18 +186,16 @@ function StudentLogin() {
               </div>
             </div>
 
-            {/* Options */}
             <div className="login-options">
               <label className="remember">
                 <input type="checkbox" defaultChecked />
                 Remember me
               </label>
               <Link to="/teacher/login" style={{ fontSize: "13px", color: "#6b46c1", textDecoration: "none" }}>
-                Teacher Portal →
+                Faculty Portal →
               </Link>
             </div>
 
-            {/* Login Button */}
             <motion.button
               type="submit"
               className="login-button"
@@ -205,7 +203,7 @@ function StudentLogin() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
             >
-              <span>{loading ? "Logging in..." : "Login"}</span>
+              <span>{loading ? "Logging in..." : "Login to Student Portal"}</span>
               <span>→</span>
             </motion.button>
           </form>

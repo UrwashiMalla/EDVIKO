@@ -2,13 +2,11 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
-import { getInstitutionName, setInstitutionName } from "../services/frontendStorage";
 import studentImage from "../assets/student/student.png";
 
 function TeacherLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [institution, setInstitution] = useState(getInstitutionName() || "");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -20,17 +18,14 @@ function TeacherLogin() {
     setErrorMessage("");
 
     if (!email || !password) {
-      setErrorMessage("Please enter teacher email and password.");
+      setErrorMessage("Please enter your educator email and password.");
       return;
     }
 
     setLoading(true);
 
     try {
-      if (institution.trim()) {
-        setInstitutionName(institution.trim());
-      }
-      await loginTeacher(email.trim(), password);
+      await loginTeacher(email.trim().toLowerCase(), password);
       navigate("/teacher/dashboard");
     } catch (err) {
       setErrorMessage(err.message || "Failed to log in as Teacher. Please check your credentials.");
@@ -61,7 +56,7 @@ function TeacherLogin() {
             <span>Guide & Inspire! 👨‍🏫</span>
           </h1>
           <p>
-            Monitor your students' learning progress, inspect uploaded study materials, and review real-time quiz accuracy analytics.
+            Monitor your students' learning progress, manage classroom materials, and review real-time quiz accuracy analytics on EDVIKO.
           </p>
         </div>
 
@@ -103,52 +98,25 @@ function TeacherLogin() {
                 color: "#b91c1c",
                 fontSize: "14px",
                 fontWeight: 500,
+                border: "1px solid #fecaca",
               }}
             >
               ⚠️ {errorMessage}
             </motion.div>
           )}
 
-          {/* Quick Credential Tip */}
-          <div
-            style={{
-              padding: "10px 14px",
-              background: "#eff6ff",
-              border: "1px solid #bfdbfe",
-              borderRadius: "10px",
-              fontSize: "12px",
-              color: "#1e40af",
-              marginBottom: "16px",
-            }}
-          >
-            💡 Default Faculty: <strong>teacher@lerniq.edu</strong> / <strong>Teacher@123</strong>
-          </div>
-
-          <form onSubmit={handleLogin}>
-            {/* University / School / College Block */}
+          <form onSubmit={handleLogin} className="login-form">
             <div className="input-group">
-              <label>University / School / College Name</label>
-              <div className="input-wrapper">
-                <span>🏛️</span>
-                <input
-                  type="text"
-                  placeholder="e.g. Stanford University / MIT / Delhi University"
-                  value={institution}
-                  onChange={(e) => setInstitution(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="input-group">
-              <label>Faculty Email</label>
+              <label>Faculty Email Address</label>
               <div className="input-wrapper">
                 <span>✉️</span>
                 <input
                   type="email"
-                  placeholder="Enter your faculty email"
+                  placeholder="e.g. instructor@university.edu"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  autoFocus
                 />
               </div>
             </div>
@@ -189,7 +157,17 @@ function TeacherLogin() {
             </motion.button>
           </form>
 
-          <p className="signup-text" style={{ marginTop: "24px" }}>
+          {/* New Teacher Signup Link */}
+          <div style={{ marginTop: "20px", textAlign: "center", padding: "13px", background: "rgba(245, 243, 255, 0.85)", borderRadius: "14px", border: "1px solid #ddd6fe" }}>
+            <p style={{ margin: 0, fontSize: "13px", color: "#64748b" }}>
+              New Educator?{" "}
+              <Link to="/teacher/signup" style={{ color: "#7c3aed", fontWeight: "700", textDecoration: "none" }}>
+                Register Faculty Account →
+              </Link>
+            </p>
+          </div>
+
+          <p className="signup-text" style={{ marginTop: "20px" }}>
             Need student access instead?{" "}
             <button
               type="button"

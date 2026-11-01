@@ -86,24 +86,85 @@ function TeacherStudentDetail() {
     };
   }, [effectiveStudentId]);
 
-  const handleOpenDM = () => {
+  const handleOpenDM = async () => {
     setDmMessages(getDirectMessages(effectiveStudentId));
     setShowDM(true);
+    try {
+      const res = await teacherApi.getDirectMessages(effectiveStudentId);
+      if (res && res.messages && res.messages.length > 0) {
+        setDmMessages(
+          res.messages.map((m) => ({
+            id: m._id,
+            studentId: effectiveStudentId,
+            studentName: studentData?.student?.name || "Student",
+            senderRole: m.senderRole,
+            senderName: m.senderName,
+            text: m.text,
+            timestamp: new Date(m.createdAt).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          }))
+        );
+      }
+    } catch (err) {
+      console.warn("Could not load direct messages from backend:", err.message);
+    }
   };
 
-  const handleSendDM = (e) => {
+  const handleSendDM = async (e) => {
     e.preventDefault();
     if (!dmInput.trim()) return;
 
+    const text = dmInput.trim();
     const studentName = studentData?.student?.name || "Student";
+    const studentEmail = studentData?.student?.email || "";
+
+    // 1. Send via backend API to store in MongoDB and trigger notification
+    try {
+      await teacherApi.sendDirectMessage(effectiveStudentId, { text });
+    } catch (err) {
+      console.warn("Backend direct message error:", err.message);
+    }
+
+    // 2. Also save to frontend storage and sync bus
     const updated = sendDirectMessage(effectiveStudentId, {
       senderRole: "teacher",
       senderName: user?.name || "Prof. Sarah Jenkins",
-      text: dmInput.trim(),
+      text,
       studentName,
+      studentEmail,
     });
 
-    setDmMessages(updated);
+    // 3. Immediately refresh from backend
+    try {
+      const res = await teacherApi.getDirectMessages(effectiveStudentId);
+      if (res && res.messages && res.messages.length > 0) {
+        setDmMessages(
+          res.messages.map((m) => ({
+            id: m._id,
+            studentId: effectiveStudentId,
+            studentName,
+            senderRole: m.senderRole,
+            senderName: m.senderName,
+            text: m.text,
+            timestamp: new Date(m.createdAt).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          }))
+        );
+      } else {
+        setDmMessages(updated);
+      }
+    } catch {
+      setDmMessages(updated);
+    }
+
     setDmInput("");
     showToast(`Personal message delivered to ${studentName}!`);
   };

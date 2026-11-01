@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/useAuth";
 import { teacherApi } from "../services/api";
@@ -24,6 +24,19 @@ import Navbar from "./Navbar";
 function TeacherDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Support jumping to 1-on-1 Student Inquiry tab from notifications
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "inquiry" || tab === "direct") {
+      setMessageTab("direct");
+      const targetStudent = searchParams.get("studentId");
+      if (targetStudent) {
+        setSelectedStudentForDM(targetStudent);
+      }
+    }
+  }, [searchParams]);
 
   const [dashboardData, setDashboardData] = useState(null);
   const [students, setStudents] = useState([]);
@@ -210,32 +223,75 @@ function TeacherDashboard() {
     (s) => !getRemovedStudentIds().includes(String(s.id))
   );
 
+  const currentStudentObj = availableStudentsForDM.find(
+    (s) => String(s.id) === String(selectedStudentForDM)
+  ) || (availableStudentsForDM.length > 0 ? availableStudentsForDM[0] : { name: "Student", email: "", id: "" });
+
+  const handleRegenerateCode = async () => {
+    if (!window.confirm("Are you sure you want to regenerate your classroom code? Students will need the new code to join.")) return;
+    try {
+      const res = await teacherApi.regenerateClassroomCode({});
+      if (res.code) {
+        showToast(`Classroom code updated to ${res.code}!`);
+      }
+    } catch (err) {
+      showToast(err.message || "Failed to regenerate code.");
+    }
+  };
+
   const handleTeacherReply = async (e) => {
     e.preventDefault();
     if (!teacherReplyText.trim() || !selectedStudentForDM) return;
 
     const text = teacherReplyText.trim();
-    const currentStudentObj = availableStudentsForDM.find((s) => String(s.id) === String(selectedStudentForDM)) || { name: "Student" };
+    const studentId = String(selectedStudentForDM);
+    const targetStudent = availableStudentsForDM.find((s) => String(s.id) === studentId) || currentStudentObj;
 
     // 1. Send via backend API to store in MongoDB and notify the selected student
     try {
-      await teacherApi.sendDirectMessage(selectedStudentForDM, { text });
+      await teacherApi.sendDirectMessage(studentId, { text });
     } catch (err) {
       console.warn("Backend direct message error:", err.message);
     }
 
     // 2. Also save to frontend storage and dispatch sync event
-    const updated = sendDirectMessage(selectedStudentForDM, {
+    const updated = sendDirectMessage(studentId, {
       senderRole: "teacher",
-      senderName: user?.name || "Prof. Sarah Jenkins",
+      senderName: user?.name || "Faculty Instructor",
       text,
-      studentName: currentStudentObj.name,
-      studentEmail: currentStudentObj.email,
+      studentName: targetStudent.name || "Student",
+      studentEmail: targetStudent.email || "",
     });
 
-    setDirectMessages(updated);
+    // 3. Immediately refresh messages from backend API
+    try {
+      const res = await teacherApi.getDirectMessages(studentId);
+      if (res && res.messages && res.messages.length > 0) {
+        setDirectMessages(
+          res.messages.map((m) => ({
+            id: m._id,
+            studentId,
+            studentName: m.recipientName,
+            senderRole: m.senderRole,
+            senderName: m.senderName,
+            text: m.text,
+            timestamp: new Date(m.createdAt).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          }))
+        );
+      } else {
+        setDirectMessages(updated);
+      }
+    } catch {
+      setDirectMessages(updated);
+    }
+
     setTeacherReplyText("");
-    showToast(`Personal message delivered to ${currentStudentObj.name}!`);
+    showToast(`Personal message delivered to ${targetStudent.name || "student"}!`);
   };
 
   const handleQuickUploadNote = (e) => {
@@ -1042,9 +1098,35 @@ function TeacherDashboard() {
 
                   <select
                     value={selectedStudentForDM}
-                    onChange={(e) => {
-                      setSelectedStudentForDM(e.target.value);
-                      setDirectMessages(getDirectMessages(e.target.value));
+                    onChange={async (e) => {
+                      const sId = e.target.value;
+                      setSelectedStudentForDM(sId);
+                      setDirectMessages(getDirectMessages(sId));
+                      if (sId) {
+                        try {
+                          const res = await teacherApi.getDirectMessages(sId);
+                          if (res && res.messages) {
+                            setDirectMessages(
+                              res.messages.map((m) => ({
+                                id: m._id,
+                                studentId: sId,
+                                studentName: m.recipientName,
+                                senderRole: m.senderRole,
+                                senderName: m.senderName,
+                                text: m.text,
+                                timestamp: new Date(m.createdAt).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }),
+                              }))
+                            );
+                          }
+                        } catch (err) {
+                          console.warn("Could not load student messages:", err);
+                        }
+                      }
                     }}
                     style={{
                       width: "100%",
@@ -1059,68 +1141,91 @@ function TeacherDashboard() {
                       outline: "none",
                     }}
                   >
-                    {availableStudentsForDM.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.email})
-                      </option>
-                    ))}
+                    {availableStudentsForDM.length === 0 ? (
+                      <option value="">No enrolled students in classroom yet</option>
+                    ) : (
+                      availableStudentsForDM.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.email})
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
                 {/* Message Feed */}
                 <div style={{ background: "#faf9ff", borderRadius: "16px", padding: "20px", maxHeight: "300px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px", border: "1px solid #ede9fe" }}>
-                  {directMessages.map((msg) => {
-                    const isFaculty = msg.senderRole === "teacher";
-                    return (
-                      <div
-                        key={msg.id}
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: isFaculty ? "flex-end" : "flex-start",
-                        }}
-                      >
-                        <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "4px" }}>
-                          {isFaculty ? "You (Faculty)" : msg.senderName} • {msg.timestamp}
-                        </div>
+                  {directMessages.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "30px 10px", color: "#94a3b8", fontSize: "13px" }}>
+                      <span style={{ fontSize: "28px", display: "block", marginBottom: "6px" }}>💬</span>
+                      No messages yet with {currentStudentObj.name || "this student"}.
+                      <br />
+                      <small style={{ fontSize: "11px", color: "#cbd5e1" }}>
+                        Type a message below to start a private 1-on-1 discussion.
+                      </small>
+                    </div>
+                  ) : (
+                    directMessages.map((msg) => {
+                      const isFaculty = msg.senderRole === "teacher";
+                      return (
                         <div
+                          key={msg.id}
                           style={{
-                            maxWidth: "80%",
-                            padding: "10px 16px",
-                            borderRadius: isFaculty ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
-                            background: isFaculty ? "#6d28d9" : "#ffffff",
-                            color: isFaculty ? "#ffffff" : "#1e293b",
-                            fontSize: "13px",
-                            border: isFaculty ? "none" : "1px solid #e2e8f0",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: isFaculty ? "flex-end" : "flex-start",
                           }}
                         >
-                          {msg.text}
+                          <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "4px" }}>
+                            {isFaculty ? "You (Faculty)" : msg.senderName} • {msg.timestamp}
+                          </div>
+                          <div
+                            style={{
+                              maxWidth: "80%",
+                              padding: "10px 16px",
+                              borderRadius: isFaculty ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
+                              background: isFaculty ? "#6d28d9" : "#ffffff",
+                              color: isFaculty ? "#ffffff" : "#1e293b",
+                              fontSize: "13px",
+                              border: isFaculty ? "none" : "1px solid #e2e8f0",
+                            }}
+                          >
+                            {msg.text}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
 
                 {/* Reply Box */}
                 <form onSubmit={handleTeacherReply} style={{ display: "flex", gap: "10px" }}>
                   <input
                     type="text"
-                    placeholder={selectedStudentForDM ? `Reply personally to ${currentStudentObj.name || "Student"}...` : "Select a student to message..."}
+                    placeholder={
+                      availableStudentsForDM.length === 0
+                        ? "No enrolled students to message..."
+                        : selectedStudentForDM
+                        ? `Reply personally to ${currentStudentObj.name || "Student"}...`
+                        : "Select a student to message..."
+                    }
                     value={teacherReplyText}
                     onChange={(e) => setTeacherReplyText(e.target.value)}
+                    disabled={!selectedStudentForDM || availableStudentsForDM.length === 0}
                     style={{ flex: 1, padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "13px" }}
                   />
                   <button
                     type="submit"
+                    disabled={!selectedStudentForDM || availableStudentsForDM.length === 0}
                     style={{
                       padding: "12px 22px",
-                      background: "#6d28d9",
+                      background: (!selectedStudentForDM || availableStudentsForDM.length === 0) ? "#cbd5e1" : "#6d28d9",
                       color: "#fff",
                       border: "none",
                       borderRadius: "10px",
                       fontSize: "13px",
                       fontWeight: "700",
-                      cursor: "pointer",
+                      cursor: (!selectedStudentForDM || availableStudentsForDM.length === 0) ? "not-allowed" : "pointer",
                     }}
                   >
                     Send Reply

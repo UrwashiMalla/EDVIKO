@@ -215,6 +215,26 @@ function RoleSelection() {
           <span className="arrow">→</span>
         </motion.button>
 
+        {/* Quick Registration Option */}
+        <div style={{ marginTop: "20px", textAlign: "center", padding: "12px", background: "rgba(255, 255, 255, 0.7)", borderRadius: "14px", border: "1px solid #ede9fe", fontSize: "13px", color: "#64748b" }}>
+          <span>New to EDVIKO? </span>
+          <button
+            type="button"
+            onClick={() => navigate("/student/signup")}
+            style={{ background: "none", border: "none", color: "#7c3aed", fontWeight: "700", cursor: "pointer", textDecoration: "underline", padding: "0 6px" }}
+          >
+            Student Sign Up
+          </button>
+          <span style={{ color: "#cbd5e1" }}>•</span>
+          <button
+            type="button"
+            onClick={() => navigate("/teacher/signup")}
+            style={{ background: "none", border: "none", color: "#7c3aed", fontWeight: "700", cursor: "pointer", textDecoration: "underline", padding: "0 6px" }}
+          >
+            Faculty Sign Up
+          </button>
+        </div>
+
         {/* Bottom Tagline */}
         <p className="bottom-text" style={{ marginTop: "24px", textAlign: "center", fontSize: "13px", color: "#858097" }}>
           One unified platform. Smarter learning. Better growth.

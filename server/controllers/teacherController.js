@@ -7,6 +7,10 @@ const Quiz = require("../models/Quiz");
 const QuizAttempt = require("../models/QuizAttempt");
 const Message = require("../models/Message");
 const Notification = require("../models/Notification");
+const Classroom = require("../models/Classroom");
+const Lecture = require("../models/Lecture");
+const Note = require("../models/Note");
+const { generateUniqueTeacherCode } = require("../utils/codeGenerator");
 
 /**
  * Helper to fetch assigned active student IDs for this teacher
@@ -15,15 +19,40 @@ const getAssignedStudentIds = async (teacherUserId) => {
   const teacherProfile = await TeacherProfile.findOne({ userId: teacherUserId });
   if (!teacherProfile) return [];
 
-  const removedIds = (teacherProfile.removedStudents || [])
-    .filter((r) => r.studentId)
-    .map((r) => r.studentId.toString());
+  const removedIds = new Set(
+    (teacherProfile.removedStudents || [])
+      .filter((r) => r.studentId)
+      .map((r) => r.studentId.toString())
+  );
 
-  const activeIds = (teacherProfile.students || [])
-    .map((id) => id.toString())
-    .filter((id) => !removedIds.includes(id));
+  const idSet = new Set();
 
-  return activeIds;
+  // 1. From TeacherProfile.students
+  (teacherProfile.students || []).forEach((id) => {
+    if (id) idSet.add(id.toString());
+  });
+
+  // 2. From Classrooms owned by this teacher
+  const classrooms = await Classroom.find({ teacherId: teacherUserId }).select("students");
+  classrooms.forEach((cls) => {
+    (cls.students || []).forEach((sId) => {
+      if (sId) idSet.add(sId.toString());
+    });
+  });
+
+  // 3. From StudentProfile enrolled in this teacher's classroom code or teacherId
+  const studentProfiles = await StudentProfile.find({
+    $or: [
+      { teacherId: teacherUserId },
+      { classroomCode: teacherProfile.teacherCode },
+    ],
+  }).select("userId");
+
+  studentProfiles.forEach((sp) => {
+    if (sp.userId) idSet.add(sp.userId.toString());
+  });
+
+  return Array.from(idSet).filter((id) => !removedIds.has(id));
 };
 
 /**
@@ -748,6 +777,378 @@ const getConversationsList = async (req, res, next) => {
   }
 };
 
+
+/**
+ * Teacher creates a new classroom with custom name & subject
+ */
+const createTeacherClassroom = async (req, res, next) => {
+  try {
+    const { name, subject, description } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: "Classroom name is required." });
+    }
+
+    const teacherUserId = req.user._id;
+    const teacherProfile = await TeacherProfile.findOne({ userId: teacherUserId });
+    const code = await generateUniqueTeacherCode();
+
+    const classroom = await Classroom.create({
+      name: name.trim(),
+      code,
+      teacherId: teacherUserId,
+      teacherName: req.user.name || "Faculty Instructor",
+      subject: (subject || teacherProfile?.subject || "General Academics").trim(),
+      description: (description || "").trim(),
+      students: [],
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `Classroom "${classroom.name}" created with code: ${code}`,
+      classroom,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Teacher manually regenerates code for a classroom if explicitly requested
+ */
+const regenerateClassroomCode = async (req, res, next) => {
+  try {
+    const { classroomId } = req.body;
+    const teacherUserId = req.user._id;
+    const newCode = await generateUniqueTeacherCode();
+
+    let classroom;
+    if (classroomId) {
+      classroom = await Classroom.findOne({ _id: classroomId, teacherId: teacherUserId });
+    } else {
+      classroom = await Classroom.findOne({ teacherId: teacherUserId }).sort({ createdAt: -1 });
+    }
+
+    if (!classroom) {
+      // Create if none exists
+      const prof = await TeacherProfile.findOne({ userId: teacherUserId });
+      classroom = await Classroom.create({
+        name: `${prof?.subject || "Course"} - ${req.user.name}`,
+        code: newCode,
+        teacherId: teacherUserId,
+        teacherName: req.user.name,
+        subject: prof?.subject || "General Academics",
+        students: [],
+      });
+    } else {
+      classroom.code = newCode;
+      await classroom.save();
+    }
+
+    // Also update main profile teacherCode so it stays in sync
+    await TeacherProfile.findOneAndUpdate(
+      { userId: teacherUserId },
+      { teacherCode: newCode }
+    );
+
+    res.json({
+      success: true,
+      message: `Classroom code updated to ${newCode}`,
+      code: newCode,
+      classroom,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get all classrooms created by this teacher
+ */
+const getTeacherClassrooms = async (req, res, next) => {
+  try {
+    const teacherUserId = req.user._id;
+    let classrooms = await Classroom.find({ teacherId: teacherUserId })
+      .populate("students", "name email username")
+      .sort({ createdAt: -1 });
+
+    if (classrooms.length === 0) {
+      const prof = await TeacherProfile.findOne({ userId: teacherUserId });
+      if (prof) {
+        const defaultClass = await Classroom.create({
+          name: `${prof.subject || "Course"} - ${req.user.name}`,
+          code: prof.teacherCode,
+          teacherId: teacherUserId,
+          teacherName: req.user.name,
+          subject: prof.subject || "General Academics",
+          students: prof.students || [],
+        });
+        classrooms = [defaultClass];
+      }
+    }
+
+    res.json({
+      success: true,
+      classrooms,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Teacher uploads / publishes a lecture
+ */
+const createLecture = async (req, res, next) => {
+  try {
+    const { title, subject, duration, videoEmbedUrl, description, takeaways, content, classroomCode } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ success: false, message: "Lecture title is required." });
+    }
+
+    const teacherUserId = req.user._id;
+    let targetClassCode = (classroomCode || "").trim().toUpperCase();
+
+    if (!targetClassCode) {
+      const tp = await TeacherProfile.findOne({ userId: teacherUserId });
+      targetClassCode = tp?.teacherCode || "EDVIKO-CLASS";
+    }
+
+    let parsedTakeaways = [];
+    if (takeaways) {
+      if (Array.isArray(takeaways)) {
+        parsedTakeaways = takeaways.map((t) => String(t).trim()).filter(Boolean);
+      } else if (typeof takeaways === "string") {
+        parsedTakeaways = takeaways.split("\n").map((t) => t.trim()).filter(Boolean);
+      }
+    }
+
+    let cleanUrl = (videoEmbedUrl || "").trim();
+    if (cleanUrl.includes("watch?v=")) {
+      cleanUrl = cleanUrl.replace("watch?v=", "embed/");
+    }
+
+    const lecture = await Lecture.create({
+      title: title.trim(),
+      subject: (subject || "General").trim(),
+      classroomCode: targetClassCode,
+      teacherId: teacherUserId,
+      teacherName: req.user.name || "Faculty Instructor",
+      duration: (duration || "45 min").trim(),
+      videoEmbedUrl: cleanUrl,
+      description: (description || "").trim(),
+      takeaways: parsedTakeaways,
+      content: (content || "").trim(),
+    });
+
+    try {
+      const studentIds = await getAssignedStudentIds(teacherUserId);
+      if (studentIds.length > 0) {
+        const notifs = studentIds.map((sId) => ({
+          recipientId: sId,
+          senderId: teacherUserId,
+          senderName: req.user.name || "Faculty Instructor",
+          classroomCode: targetClassCode,
+          type: "lecture",
+          title: `🎥 New Lecture: ${title.trim()}`,
+          message: `Your instructor published a new lecture: "${title.trim()}" (${lecture.duration}).`,
+          link: "/student/lectures-notes",
+          isRead: false,
+        }));
+        await Notification.insertMany(notifs);
+      }
+    } catch (notifErr) {
+      console.warn("Lecture notification warning:", notifErr.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Lecture uploaded and published to classroom students successfully!",
+      lecture,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get all lectures authored by this teacher
+ */
+const getTeacherLectures = async (req, res, next) => {
+  try {
+    const { classroomCode } = req.query;
+    const filter = { teacherId: req.user._id };
+    if (classroomCode) {
+      filter.classroomCode = classroomCode.trim().toUpperCase();
+    }
+
+    const lectures = await Lecture.find(filter).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      count: lectures.length,
+      lectures,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Delete a lecture authored by this teacher
+ */
+const deleteLecture = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const lecture = await Lecture.findOneAndDelete({ _id: id, teacherId: req.user._id });
+
+    if (!lecture) {
+      return res.status(404).json({ success: false, message: "Lecture not found or unauthorized." });
+    }
+
+    res.json({
+      success: true,
+      message: "Lecture deleted successfully.",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Teacher uploads / publishes study notes
+ */
+const createNote = async (req, res, next) => {
+  try {
+    const { title, subject, module, description, content, fileName, fileSize, pages, classroomCode } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ success: false, message: "Note title is required." });
+    }
+
+    const noteContent = (content || description || "").trim();
+    if (!noteContent) {
+      return res.status(400).json({ success: false, message: "Note content or description is required." });
+    }
+
+    const teacherUserId = req.user._id;
+    let targetClassCode = (classroomCode || "").trim().toUpperCase();
+
+    if (!targetClassCode) {
+      const tp = await TeacherProfile.findOne({ userId: teacherUserId });
+      targetClassCode = tp?.teacherCode || "EDVIKO-CLASS";
+    }
+
+    let docRecord = null;
+    try {
+      docRecord = await Document.create({
+        studentId: teacherUserId,
+        teacherId: teacherUserId,
+        isTeacherMaterial: true,
+        title: title.trim(),
+        extractedText: noteContent,
+        originalFileName: fileName || `${title.trim().replace(/\s+/g, "_")}.txt`,
+        fileType: "text",
+        wordCount: noteContent.split(/\s+/).length,
+      });
+    } catch (docErr) {
+      console.warn("Document auto-creation notice:", docErr.message);
+    }
+
+    const note = await Note.create({
+      title: title.trim(),
+      subject: (subject || "General").trim(),
+      module: (module || "General Curriculum").trim(),
+      classroomCode: targetClassCode,
+      teacherId: teacherUserId,
+      teacherName: req.user.name || "Faculty Instructor",
+      fileSize: (fileSize || "1.2 MB").trim(),
+      pages: (pages || "Handout").trim(),
+      description: (description || "").trim(),
+      content: noteContent,
+      fileName: (fileName || `${title.trim()}.txt`).trim(),
+      fileUrl: "",
+      documentId: docRecord ? docRecord._id : null,
+    });
+
+    try {
+      const studentIds = await getAssignedStudentIds(teacherUserId);
+      if (studentIds.length > 0) {
+        const notifs = studentIds.map((sId) => ({
+          recipientId: sId,
+          senderId: teacherUserId,
+          senderName: req.user.name || "Faculty Instructor",
+          classroomCode: targetClassCode,
+          type: "note",
+          title: `📄 New Study Notes: ${title.trim()}`,
+          message: `Your instructor published new notes on "${title.trim()}" for ${note.subject}.`,
+          link: "/student/lectures-notes",
+          isRead: false,
+        }));
+        await Notification.insertMany(notifs);
+      }
+    } catch (notifErr) {
+      console.warn("Note notification warning:", notifErr.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Study note published to classroom students successfully!",
+      note,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get all notes authored by this teacher
+ */
+const getTeacherNotes = async (req, res, next) => {
+  try {
+    const { classroomCode } = req.query;
+    const filter = { teacherId: req.user._id };
+    if (classroomCode) {
+      filter.classroomCode = classroomCode.trim().toUpperCase();
+    }
+
+    const notes = await Note.find(filter).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      count: notes.length,
+      notes,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Delete a note authored by this teacher
+ */
+const deleteNote = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const note = await Note.findOneAndDelete({ _id: id, teacherId: req.user._id });
+
+    if (!note) {
+      return res.status(404).json({ success: false, message: "Note not found or unauthorized." });
+    }
+
+    if (note.documentId) {
+      await Document.findByIdAndDelete(note.documentId).catch(() => {});
+    }
+
+    res.json({
+      success: true,
+      message: "Note deleted successfully.",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getTeacherDashboard,
   getAssignedStudents,
@@ -763,4 +1164,13 @@ module.exports = {
   sendDirectMessage,
   getStudentDirectMessages,
   getConversationsList,
+  createTeacherClassroom,
+  regenerateClassroomCode,
+  getTeacherClassrooms,
+  createLecture,
+  getTeacherLectures,
+  deleteLecture,
+  createNote,
+  getTeacherNotes,
+  deleteNote,
 };

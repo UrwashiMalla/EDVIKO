@@ -3,6 +3,8 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const StudentProfile = require("../models/StudentProfile");
 const TeacherProfile = require("../models/TeacherProfile");
+const Classroom = require("../models/Classroom");
+const Notification = require("../models/Notification");
 const {
   generateOtp,
   verifyOtp,
@@ -17,7 +19,7 @@ const {
 const { generateUniqueTeacherCode } = require("../utils/codeGenerator");
 
 const createToken = (user) => {
-  const secret = process.env.JWT_SECRET || "lerniq_jwt_secret_dev_key_2026_super_secure";
+  const secret = process.env.JWT_SECRET || "edviko_jwt_secret_dev_key_2026_super_secure";
   return jwt.sign(
     {
       id: user._id,
@@ -36,7 +38,7 @@ const sendTokenResponse = (user, statusCode, res, message = "Success", extraData
     expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   };
 
   res
@@ -60,12 +62,13 @@ const sendTokenResponse = (user, statusCode, res, message = "Success", extraData
 };
 
 // ==========================================
-// 1. STUDENT REGISTRATION (EMAIL OTP DISPATCH & VERIFY)
+// 1. STUDENT REGISTRATION (OTP DISPATCH & VERIFY)
 // ==========================================
 const sendStudentRegistrationOtp = async (req, res, next) => {
   try {
-    const rawEmail = (req.body.email || req.body.username || "").trim();
+    const rawEmail = (req.body.email || "").trim();
     const rawName = (req.body.name || req.body.username || "Student").trim();
+    const rawUsername = (req.body.username || "").trim();
 
     if (!rawEmail) {
       return res.status(400).json({
@@ -80,18 +83,14 @@ const sendStudentRegistrationOtp = async (req, res, next) => {
     if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
       return res.status(400).json({
         success: false,
-        message: "Please enter a valid email address (e.g. name@gmail.com).",
+        message: "Please enter a valid email address (e.g. yourname@gmail.com).",
       });
     }
 
     // Check if username is already taken by a verified user
-    if (rawName) {
-      const existingUser = await User.findOne({
-        $or: [
-          { username: rawName.toLowerCase() },
-          { name: { $regex: new RegExp(`^${rawName}$`, "i") } },
-        ],
-      });
+    if (rawUsername) {
+      const cleanUsername = rawUsername.toLowerCase();
+      const existingUser = await User.findOne({ username: cleanUsername });
       if (existingUser && existingUser.isVerified) {
         if (existingUser.isRemoved) {
           return res.status(403).json({
@@ -122,33 +121,72 @@ const sendStudentRegistrationOtp = async (req, res, next) => {
       });
     }
 
-    // Generate 6-digit OTP in MongoDB
-    const otpData = await generateOtp(normalizedEmail, "student_verification");
-    console.log(`[AUTH] 📧 Dispatching OTP ${otpData.otp} to ${normalizedEmail} (Student: ${rawName})...`);
+    // Validate Classroom Code (Mandatory: student must match teacher's code to enter class)
+    const rawTeacherCode = (req.body.teacherCode || "").trim().toUpperCase();
+    if (!rawTeacherCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Classroom Code is required. Please obtain the classroom code from your teacher to register.",
+      });
+    }
 
-    // Dispatch real email via Gmail SMTP
+    let matchedClassroom = await Classroom.findOne({ code: rawTeacherCode });
+    let matchedTeacher = null;
+
+    if (matchedClassroom) {
+      matchedTeacher = await User.findById(matchedClassroom.teacherId).select("name email");
+    } else {
+      const teacherProf = await TeacherProfile.findOne({ teacherCode: rawTeacherCode });
+      if (teacherProf) {
+        matchedTeacher = await User.findById(teacherProf.userId).select("name email");
+        matchedClassroom = {
+          name: `${teacherProf.subject || "Course"} - ${matchedTeacher?.name || "Faculty"}`,
+          code: rawTeacherCode,
+          subject: teacherProf.subject || "General Academics",
+          teacherId: teacherProf.userId,
+          teacherName: matchedTeacher?.name || "Faculty Member",
+        };
+      }
+    }
+
+    if (!matchedClassroom || !matchedTeacher) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid Classroom Code: No teacher found with code "${rawTeacherCode}". Please check with your teacher and enter a valid code.`,
+      });
+    }
+
+    // Generate 6-digit OTP in MongoDB (stored as bcrypt hash, expires in 5 minutes)
+    const otpData = await generateOtp(normalizedEmail, "student_verification");
+    console.log(`[AUTH] 📧 Dispatching OTP to ${normalizedEmail} (Student: ${rawName}, Classroom: ${rawTeacherCode})...`);
+
+    // Dispatch real email via SMTP
     const emailRes = await sendStudentOtpEmail({
       email: normalizedEmail,
       name: rawName,
       otp: otpData.otp,
     });
 
-    if (!emailRes.success && !emailRes.simulated) {
-      console.warn(`[AUTH] ⚠️ Email delivery to ${normalizedEmail} encountered issue: ${emailRes.error}`);
-      return res.status(200).json({
-        success: true,
-        message: `Verification code generated! (Notice: ${emailRes.error || "Email issue"}). Your verification code is: ${otpData.otp} (or use fallback code: 123456).`,
-        otp: otpData.otp,
-        devOtp: "123456",
-        email: normalizedEmail,
+    if (!emailRes.success) {
+      console.error(`[AUTH] ❌ SMTP Email delivery failed for ${normalizedEmail}: ${emailRes.error}`);
+      return res.status(502).json({
+        success: false,
+        message: `Failed to deliver verification code to ${normalizedEmail}. SMTP error: ${emailRes.error || "Mail server error"}. Please check your email address or SMTP configuration.`,
+        errorDetails: emailRes.error,
       });
     }
 
     res.status(200).json({
       success: true,
-      message: `A 6-digit verification code has been sent to ${normalizedEmail}. Please check your inbox or spam folder.`,
+      message: `A 6-digit verification code has been sent to ${normalizedEmail}. Valid for 5 minutes.`,
       email: normalizedEmail,
-      senderEmail: process.env.EMAIL_USER || "pandeaditya786@gmail.com",
+      classroom: {
+        code: rawTeacherCode,
+        name: matchedClassroom.name,
+        subject: matchedClassroom.subject,
+        teacherName: matchedClassroom.teacherName || matchedTeacher.name,
+      },
+      senderEmail: process.env.EMAIL_USER || "noreply@edviko.edu",
     });
   } catch (err) {
     next(err);
@@ -157,7 +195,7 @@ const sendStudentRegistrationOtp = async (req, res, next) => {
 
 const verifyStudentRegistrationOtp = async (req, res, next) => {
   try {
-    const rawEmail = (req.body.email || req.body.username || "").trim();
+    const rawEmail = (req.body.email || "").trim();
     const { otp } = req.body;
 
     if (!rawEmail || !otp) {
@@ -168,48 +206,22 @@ const verifyStudentRegistrationOtp = async (req, res, next) => {
     }
 
     const normalizedEmail = rawEmail.toLowerCase();
-    const trimmedOtp = String(otp).trim();
+    const verification = await verifyOtp(normalizedEmail, otp, "student_verification");
 
-    // Verify against MongoDB Otp collection or fallback 123456
-    let isValid = false;
-    if (trimmedOtp === "123456" || (process.env.DEV_OTP && trimmedOtp === process.env.DEV_OTP)) {
-      isValid = true;
-    } else {
-      isValid = await verifyOtp(normalizedEmail, trimmedOtp, "student_verification");
-    }
-
-    if (!isValid) {
+    if (!verification.success) {
       return res.status(400).json({
         success: false,
-        message: "Invalid or expired verification code. Please check your email or request a new code.",
+        message: verification.message || "Invalid or expired verification code.",
       });
     }
 
     // Issue verification token for Step 3
-    const secret = process.env.JWT_SECRET || "lerniq_jwt_secret_dev_key_2026_super_secure";
+    const secret = process.env.JWT_SECRET || "edviko_jwt_secret_dev_key_2026_super_secure";
     const verificationToken = jwt.sign(
       { email: normalizedEmail, verified: true, purpose: "signup-verification" },
       secret,
       { expiresIn: "15m" }
     );
-
-    // If an existing user was logging in and verifying, log them in immediately
-    const existingUser = await User.findOne({ email: normalizedEmail });
-    if (existingUser) {
-      existingUser.isVerified = true;
-      await existingUser.save();
-
-      const profile = await StudentProfile.findOne({ userId: existingUser._id }).populate(
-        "teacherId",
-        "name email"
-      );
-
-      return sendTokenResponse(existingUser, 200, res, "Email verified successfully! Logged in.", {
-        verified: true,
-        verificationToken,
-        profile,
-      });
-    }
 
     res.status(200).json({
       success: true,
@@ -230,15 +242,23 @@ const registerStudent = async (req, res, next) => {
   try {
     const { name, username, email, password, confirmPassword, teacherCode, verificationToken, otp } = req.body;
 
-    const rawName = (username || name || email || "").trim();
-    if (!rawName || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Username and password are required.",
-      });
+    const rawName = (name || "").trim();
+    const rawUsername = (username || "").trim().toLowerCase();
+    const rawEmail = (email || "").trim().toLowerCase();
+
+    if (!rawName) {
+      return res.status(400).json({ success: false, message: "Full Name is required." });
     }
 
-    if (password.length < 8) {
+    if (!rawUsername || rawUsername.length < 3) {
+      return res.status(400).json({ success: false, message: "Username must be at least 3 characters." });
+    }
+
+    if (!rawEmail || !/^\S+@\S+\.\S+$/.test(rawEmail)) {
+      return res.status(400).json({ success: false, message: "A valid email address is required." });
+    }
+
+    if (!password || password.length < 8) {
       return res.status(400).json({
         success: false,
         message: "Password must be at least 8 characters.",
@@ -252,27 +272,21 @@ const registerStudent = async (req, res, next) => {
       });
     }
 
-    // Determine clean username and valid email address
-    const cleanUsername = rawName.toLowerCase().replace(/\s+/g, "_");
-    let finalEmail = (email || "").trim().toLowerCase();
-    if (!finalEmail || !finalEmail.includes("@")) {
-      finalEmail = `${cleanUsername}@lerniq.edu`;
-    }
-
-    // Check verification if token or otp provided
-    let verified = true;
+    // Verify token or OTP
+    let verified = false;
     if (verificationToken) {
       try {
-        const secret = process.env.JWT_SECRET || "lerniq_jwt_secret_dev_key_2026_super_secure";
+        const secret = process.env.JWT_SECRET || "edviko_jwt_secret_dev_key_2026_super_secure";
         const decoded = jwt.verify(verificationToken, secret);
-        if (!decoded || decoded.email !== finalEmail) {
-          verified = false;
+        if (decoded && decoded.email === rawEmail) {
+          verified = true;
         }
       } catch {
         verified = false;
       }
     } else if (otp) {
-      verified = await verifyOtp(finalEmail, otp, "student_verification");
+      const v = await verifyOtp(rawEmail, otp, "student_verification");
+      verified = v.success;
     }
 
     if (!verified) {
@@ -282,42 +296,21 @@ const registerStudent = async (req, res, next) => {
       });
     }
 
-    // Check if user already exists
-    let existing = await User.findOne({
-      $or: [
-        { email: finalEmail },
-        { username: cleanUsername },
-        { name: rawName },
-      ],
-    });
+    // Check existing email
+    const existingEmail = await User.findOne({ email: rawEmail });
+    if (existingEmail && existingEmail.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "An account with this email address already exists. Please log in directly.",
+      });
+    }
 
-    if (existing) {
-      if (existing.isRemoved) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Access Denied: This account was removed by the instructor and cannot be registered again.",
-        });
-      }
-      if (existing.isVerified) {
-        return res.status(400).json({
-          success: false,
-          message: "This Username or email is already registered. Please log in directly.",
-        });
-      }
-      const salt = await bcrypt.genSalt(10);
-      existing.passwordHash = await bcrypt.hash(password, salt);
-      existing.isVerified = true;
-      await existing.save();
-      const token = createToken(existing);
-      return res.status(200).json({
-        success: true,
-        message: "Account verified and updated successfully!",
-        studentId: cleanUsername,
-        username: cleanUsername,
-        email: finalEmail,
-        token,
-        user: existing,
+    // Check existing username
+    const existingUsername = await User.findOne({ username: rawUsername });
+    if (existingUsername && existingUsername.isVerified && String(existingUsername._id) !== String(existingEmail?._id)) {
+      return res.status(400).json({
+        success: false,
+        message: "This username is already taken. Please choose another username.",
       });
     }
 
@@ -325,100 +318,133 @@ const registerStudent = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Create User record
-    const user = await User.create({
-      name: rawName,
-      username: cleanUsername,
-      email: finalEmail,
-      passwordHash,
-      role: "student",
-      isVerified: true,
-    });
+    let user;
+    if (existingEmail) {
+      existingEmail.name = rawName;
+      existingEmail.username = rawUsername;
+      existingEmail.passwordHash = passwordHash;
+      existingEmail.role = "student";
+      existingEmail.isVerified = true;
+      existingEmail.isApproved = true;
+      await existingEmail.save();
+      user = existingEmail;
+    } else {
+      user = await User.create({
+        name: rawName,
+        username: rawUsername,
+        email: rawEmail,
+        passwordHash,
+        role: "student",
+        isVerified: true,
+        isApproved: true,
+      });
+    }
 
-    // Handle Teacher Assignment
+    // Classroom enrollment handling (Mandatory: Must match teacher's code)
+    const cleanTeacherCode = (teacherCode || "").trim().toUpperCase();
+    if (!cleanTeacherCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Classroom code is required. Please provide your teacher's classroom code.",
+      });
+    }
+
+    let initialClassroom = await Classroom.findOne({ code: cleanTeacherCode });
     let assignedTeacherId = null;
-    let cleanTeacherCode = (teacherCode || "").trim().toUpperCase();
-    let teacherProf = null;
+    let teacherUser = null;
 
-    if (cleanTeacherCode) {
-      teacherProf = await TeacherProfile.findOne({
-        teacherCode: cleanTeacherCode,
-      }).populate("userId", "name email");
-    }
-
-    // Fallback to first available teacher if no code specified or not found
-    if (!teacherProf) {
-      teacherProf = await TeacherProfile.findOne().populate("userId", "name email");
-      if (teacherProf) {
-        cleanTeacherCode = teacherProf.teacherCode;
+    if (initialClassroom) {
+      assignedTeacherId = initialClassroom.teacherId;
+      teacherUser = await User.findById(assignedTeacherId);
+      if (!initialClassroom.students.includes(user._id)) {
+        initialClassroom.students.push(user._id);
+        await initialClassroom.save();
       }
-    }
-
-    if (teacherProf) {
-      // Check if student was removed by this teacher
-      const isRemovedByTeacher = (teacherProf.removedStudents || []).some(
-        (r) =>
-          (r.email && r.email.toLowerCase() === finalEmail) ||
-          (r.name && r.name.toLowerCase() === cleanUsername)
-      );
-
-      if (isRemovedByTeacher) {
-        await User.findByIdAndDelete(user._id);
-        return res.status(403).json({
-          success: false,
-          message:
-            "Access Denied: You have been removed from this instructor's classroom and cannot register with this classroom code.",
+    } else {
+      const teacherProf = await TeacherProfile.findOne({ teacherCode: cleanTeacherCode });
+      if (teacherProf) {
+        assignedTeacherId = teacherProf.userId;
+        teacherUser = await User.findById(assignedTeacherId);
+        initialClassroom = await Classroom.create({
+          name: `${teacherProf.subject || "Course"} - ${teacherUser?.name || "Faculty"}`,
+          code: cleanTeacherCode,
+          teacherId: assignedTeacherId,
+          teacherName: teacherUser?.name || "Faculty Member",
+          subject: teacherProf.subject || "General Academics",
+          students: [user._id],
         });
       }
-
-      assignedTeacherId = teacherProf.userId?._id || teacherProf.userId;
-      teacherProf.students.addToSet(user._id);
-      await teacherProf.save();
     }
 
-    // Create StudentProfile with classroom history
-    const studentProfile = await StudentProfile.create({
-      userId: user._id,
-      username: cleanUsername,
-      teacherId: assignedTeacherId,
-      classroomCode: cleanTeacherCode || "TEACH-101",
-      classroomHistory: teacherProf
-        ? [
-            {
-              teacherId: assignedTeacherId,
-              teacherCode: cleanTeacherCode,
-              teacherName: teacherProf.userId?.name || "Faculty Member",
-              joinedAt: new Date(),
-            },
-          ]
-        : [],
-    });
+    if (!assignedTeacherId) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid Classroom Code: No teacher found with code "${cleanTeacherCode}".`,
+      });
+    }
+
+    // Also update teacher profile students list if assigned
+    if (assignedTeacherId) {
+      await TeacherProfile.findOneAndUpdate(
+        { userId: assignedTeacherId },
+        { $addToSet: { students: user._id } }
+      );
+    }
+
+    // Create or update StudentProfile
+    let studentProfile = await StudentProfile.findOne({ userId: user._id });
+    if (!studentProfile) {
+      studentProfile = await StudentProfile.create({
+        userId: user._id,
+        username: rawUsername,
+        teacherId: assignedTeacherId,
+        classroomCode: cleanTeacherCode,
+        classroomHistory: assignedTeacherId
+          ? [
+              {
+                teacherId: assignedTeacherId,
+                teacherCode: cleanTeacherCode,
+                teacherName: initialClassroom?.teacherName || "Faculty Member",
+                joinedAt: new Date(),
+              },
+            ]
+          : [],
+      });
+    } else {
+      studentProfile.username = rawUsername;
+      if (assignedTeacherId) {
+        studentProfile.teacherId = assignedTeacherId;
+        studentProfile.classroomCode = cleanTeacherCode;
+      }
+      await studentProfile.save();
+    }
+
+    // Notify teacher that a new student has registered and joined their classroom
+    if (assignedTeacherId) {
+      try {
+        await Notification.create({
+          recipientId: assignedTeacherId,
+          senderId: user._id,
+          senderName: user.name || "Student",
+          classroomCode: cleanTeacherCode,
+          type: "general",
+          title: "👋 New Student Joined Classroom",
+          message: `${user.name} (${user.username || user.email}) registered and joined classroom ${cleanTeacherCode}.`,
+          link: "/teacher/students",
+          isRead: false,
+        });
+      } catch (notifErr) {
+        console.warn("Registration teacher notification warning:", notifErr.message);
+      }
+    }
 
     try {
-      await clearVerifiedOtp(finalEmail, "student_verification");
+      await clearVerifiedOtp(rawEmail, "student_verification");
     } catch {}
 
-    const token = createToken(user);
-
-    res.status(201).json({
-      success: true,
-      message: "Student account created successfully!",
-      studentId: cleanUsername,
-      username: cleanUsername,
-      email: finalEmail,
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        avatar: user.avatar || "",
-        isVerified: user.isVerified,
-      },
+    sendTokenResponse(user, 201, res, "Student account created successfully!", {
       studentProfile,
       classroomCode: cleanTeacherCode,
-      teacherName: teacherProf?.userId?.name || "Faculty Member",
     });
   } catch (err) {
     next(err);
@@ -426,7 +452,7 @@ const registerStudent = async (req, res, next) => {
 };
 
 // ==========================================
-// 3. STUDENT LOGIN (USERNAME + PASSWORD)
+// 3. STUDENT LOGIN
 // ==========================================
 const loginStudent = async (req, res, next) => {
   try {
@@ -441,21 +467,17 @@ const loginStudent = async (req, res, next) => {
     if (!rawIdentifier || !password) {
       return res.status(400).json({
         success: false,
-        message: "Username / Student ID and password are required.",
+        message: "Email / Username and password are required.",
       });
     }
 
     const clean = rawIdentifier.toLowerCase();
-    const withDomain = clean.includes("@") ? clean : `${clean}@lerniq.edu`;
-    const strippedDomain = clean.replace(/@.*$/, "");
 
+    // Query user by email, username, or name
     const user = await User.findOne({
       $or: [
         { email: clean },
-        { email: withDomain },
         { username: clean },
-        { username: strippedDomain },
-        { name: clean },
         { name: rawIdentifier },
       ],
     });
@@ -463,22 +485,21 @@ const loginStudent = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: "Invalid Student ID or password.",
+        message: "Invalid Student credentials. No account found.",
       });
     }
 
     if (user.role !== "student") {
       return res.status(403).json({
         success: false,
-        message: "Access denied. Please use the Faculty / Teacher Portal to log in.",
+        message: "Access Denied: This account is a Faculty / Teacher account. Please log in via the Faculty Portal.",
       });
     }
 
     if (user.isRemoved) {
       return res.status(403).json({
         success: false,
-        message:
-          "Access Denied: You have been removed from the class by your teacher and cannot log in with this account.",
+        message: "Access Denied: You have been removed from the class by your teacher and cannot log in with this account.",
       });
     }
 
@@ -486,7 +507,7 @@ const loginStudent = async (req, res, next) => {
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: "Invalid Student ID or password.",
+        message: "Incorrect password. Please verify and try again.",
       });
     }
 
@@ -507,20 +528,105 @@ const loginStudent = async (req, res, next) => {
 };
 
 // ==========================================
-// 4. TEACHER REGISTRATION (STEP 1: OPTIONAL OTP)
+// 4. TEACHER REGISTRATION (EMAIL OTP DISPATCH & VERIFY)
 // ==========================================
-const sendTeacherRegistrationOtp = async (req, res) => {
-  return res.json({
-    success: true,
-    message: "Faculty verification optional. Registration open.",
-  });
+const sendTeacherRegistrationOtp = async (req, res, next) => {
+  try {
+    const rawEmail = (req.body.email || "").trim();
+    const rawName = (req.body.name || "Professor").trim();
+    const subject = (req.body.subject || "").trim();
+
+    if (!rawEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Faculty email address is required.",
+      });
+    }
+
+    const normalizedEmail = rawEmail.toLowerCase();
+
+    if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address.",
+      });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser && existingUser.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "An educator account with this email is already registered. Please log in directly.",
+      });
+    }
+
+    const otpData = await generateOtp(normalizedEmail, "teacher_verification");
+    console.log(`[AUTH] 📧 Dispatching Faculty OTP to ${normalizedEmail}...`);
+
+    const emailRes = await sendTeacherOtpEmail({
+      email: normalizedEmail,
+      name: rawName,
+      otp: otpData.otp,
+    });
+
+    if (!emailRes.success) {
+      console.error(`[AUTH] ❌ SMTP Email delivery failed for ${normalizedEmail}: ${emailRes.error}`);
+      return res.status(502).json({
+        success: false,
+        message: `Failed to deliver verification code to ${normalizedEmail}. SMTP error: ${emailRes.error || "Mail server error"}. Please check your email address or SMTP configuration.`,
+        errorDetails: emailRes.error,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `A 6-digit verification code has been sent to ${normalizedEmail}. Valid for 5 minutes.`,
+      email: normalizedEmail,
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
-const verifyTeacherRegistrationOtp = async (req, res) => {
-  return res.json({
-    success: true,
-    message: "Verified successfully.",
-  });
+const verifyTeacherRegistrationOtp = async (req, res, next) => {
+  try {
+    const rawEmail = (req.body.email || "").trim();
+    const { otp } = req.body;
+
+    if (!rawEmail || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Email address and 6-digit verification code are required.",
+      });
+    }
+
+    const normalizedEmail = rawEmail.toLowerCase();
+    const verification = await verifyOtp(normalizedEmail, otp, "teacher_verification");
+
+    if (!verification.success) {
+      return res.status(400).json({
+        success: false,
+        message: verification.message || "Invalid or expired verification code.",
+      });
+    }
+
+    const secret = process.env.JWT_SECRET || "edviko_jwt_secret_dev_key_2026_super_secure";
+    const verificationToken = jwt.sign(
+      { email: normalizedEmail, verified: true, purpose: "teacher-signup-verification" },
+      secret,
+      { expiresIn: "15m" }
+    );
+
+    res.status(200).json({
+      success: true,
+      verified: true,
+      verificationToken,
+      message: "Faculty email verified successfully! Please complete registration.",
+      email: normalizedEmail,
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 // ==========================================
@@ -529,23 +635,37 @@ const verifyTeacherRegistrationOtp = async (req, res) => {
 const registerTeacher = async (req, res, next) => {
   try {
     const {
-      email,
       name,
-      universityOrCollege,
-      department,
-      subject,
+      email,
       password,
       confirmPassword,
+      subject,
+      department,
+      universityOrCollege,
+      verificationToken,
+      otp,
     } = req.body;
 
-    if (!email || !name || !password) {
+    const rawName = (name || "").trim();
+    const rawEmail = (email || "").trim().toLowerCase();
+    const rawSubject = (subject || "").trim();
+
+    if (!rawName) {
+      return res.status(400).json({ success: false, message: "Full Name is required." });
+    }
+
+    if (!rawEmail || !/^\S+@\S+\.\S+$/.test(rawEmail)) {
+      return res.status(400).json({ success: false, message: "A valid email address is required." });
+    }
+
+    if (!rawSubject) {
       return res.status(400).json({
         success: false,
-        message: "Name, email, and password are required.",
+        message: "Subject name is required (e.g. Mathematics, Physics, Chemistry, English, Computer Science).",
       });
     }
 
-    if (password.length < 8) {
+    if (!password || password.length < 8) {
       return res.status(400).json({
         success: false,
         message: "Password must be at least 8 characters.",
@@ -559,41 +679,96 @@ const registerTeacher = async (req, res, next) => {
       });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
-    const existing = await User.findOne({ email: normalizedEmail });
-    if (existing) {
+    // Verify token or OTP
+    let verified = false;
+    if (verificationToken) {
+      try {
+        const secret = process.env.JWT_SECRET || "edviko_jwt_secret_dev_key_2026_super_secure";
+        const decoded = jwt.verify(verificationToken, secret);
+        if (decoded && decoded.email === rawEmail) {
+          verified = true;
+        }
+      } catch {
+        verified = false;
+      }
+    } else if (otp) {
+      const v = await verifyOtp(rawEmail, otp, "teacher_verification");
+      verified = v.success;
+    }
+
+    if (!verified) {
+      return res.status(403).json({
+        success: false,
+        message: "Email verification required. Please verify your faculty email first.",
+      });
+    }
+
+    const existingUser = await User.findOne({ email: rawEmail });
+    if (existingUser && existingUser.isVerified) {
       return res.status(400).json({
         success: false,
-        message: "An account with this email already exists.",
+        message: "A faculty account with this email address already exists. Please log in directly.",
       });
     }
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    const user = await User.create({
-      name: name.trim(),
-      email: normalizedEmail,
-      passwordHash,
-      role: "teacher",
-      isVerified: true,
-    });
+    let user;
+    if (existingUser) {
+      existingUser.name = rawName;
+      existingUser.passwordHash = passwordHash;
+      existingUser.role = "teacher";
+      existingUser.isVerified = true;
+      existingUser.isApproved = true;
+      await existingUser.save();
+      user = existingUser;
+    } else {
+      user = await User.create({
+        name: rawName,
+        username: rawEmail.split("@")[0].toLowerCase(),
+        email: rawEmail,
+        passwordHash,
+        role: "teacher",
+        isVerified: true,
+        isApproved: true,
+      });
+    }
 
+    // Unique Classroom Code
     const teacherCode = await generateUniqueTeacherCode();
 
+    // Create Teacher Profile with Subject
     const teacherProfile = await TeacherProfile.create({
       userId: user._id,
       teacherCode,
       universityOrCollege: (universityOrCollege || "University / College").trim(),
-      department: (department || "General Academics").trim(),
-      subject: (subject || "").trim(),
+      department: (department || "Academics").trim(),
+      subject: rawSubject,
       students: [],
       removedStudents: [],
     });
 
+    // Create initial Classroom
+    await Classroom.create({
+      name: `${rawSubject} - ${rawName}`,
+      code: teacherCode,
+      teacherId: user._id,
+      teacherName: rawName,
+      subject: rawSubject,
+      department: (department || "Academics").trim(),
+      description: `Official classroom for ${rawSubject} instructed by ${rawName}.`,
+      students: [],
+    });
+
+    try {
+      await clearVerifiedOtp(rawEmail, "teacher_verification");
+    } catch {}
+
     sendTokenResponse(user, 201, res, "Faculty account created successfully!", {
       teacherProfile,
       teacherCode,
+      subject: rawSubject,
     });
   } catch (err) {
     next(err);
@@ -601,7 +776,7 @@ const registerTeacher = async (req, res, next) => {
 };
 
 // ==========================================
-// 6. TEACHER LOGIN (EMAIL + PASSWORD)
+// 6. TEACHER LOGIN
 // ==========================================
 const loginTeacher = async (req, res, next) => {
   try {
@@ -615,33 +790,27 @@ const loginTeacher = async (req, res, next) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const withDomain = normalizedEmail.includes("@")
-      ? normalizedEmail
-      : `${normalizedEmail}@lerniq.edu`;
 
-    let user = await User.findOne({
-      $or: [{ email: normalizedEmail }, { email: withDomain }],
-    });
-
-    if (!user && normalizedEmail === "teacher@lerniq.edu") {
-      try {
-        const seedInitialData = require("../utils/seed");
-        await seedInitialData();
-        user = await User.findOne({ email: "teacher@lerniq.edu" });
-      } catch {}
-    }
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: "Invalid teacher email or password.",
+        message: "Invalid credentials. No faculty account found with this email.",
       });
     }
 
     if (user.role !== "teacher") {
       return res.status(403).json({
         success: false,
-        message: "Access denied. This account is registered as a student.",
+        message: "Access Denied: This account is a Student account. Please log in via the Student Portal.",
+      });
+    }
+
+    if (user.isApproved === false) {
+      return res.status(403).json({
+        success: false,
+        message: "Account pending approval. Please contact administrator.",
       });
     }
 
@@ -649,22 +818,46 @@ const loginTeacher = async (req, res, next) => {
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: "Invalid teacher email or password.",
+        message: "Incorrect password. Please verify and try again.",
       });
     }
 
+    if (!user.isVerified) {
+      user.isVerified = true;
+      await user.save();
+    }
+
+    // Load existing profile (with subject)
     let teacherProfile = await TeacherProfile.findOne({ userId: user._id });
     if (!teacherProfile) {
+      const teacherCode = await generateUniqueTeacherCode();
       teacherProfile = await TeacherProfile.create({
         userId: user._id,
-        teacherCode: "TEACH-101",
-        department: "Computer Science & AI",
+        teacherCode,
+        subject: "General Academics",
+        department: "Academics",
+        universityOrCollege: "University / College",
         students: [],
+      });
+    }
+
+    // Ensure at least one Classroom exists with their code
+    const existingClassroom = await Classroom.findOne({ teacherId: user._id });
+    if (!existingClassroom) {
+      await Classroom.create({
+        name: `${teacherProfile.subject || "Course"} - ${user.name}`,
+        code: teacherProfile.teacherCode,
+        teacherId: user._id,
+        teacherName: user.name,
+        subject: teacherProfile.subject || "General Academics",
+        students: teacherProfile.students || [],
       });
     }
 
     sendTokenResponse(user, 200, res, "Teacher logged in successfully!", {
       teacherProfile,
+      teacherCode: teacherProfile.teacherCode,
+      subject: teacherProfile.subject,
     });
   } catch (err) {
     next(err);
@@ -672,7 +865,7 @@ const loginTeacher = async (req, res, next) => {
 };
 
 // ==========================================
-// 7. FORGOT PASSWORD (OTP FLOW)
+// 7. PASSWORD RESET FLOW
 // ==========================================
 const sendForgotPasswordOtp = async (req, res, next) => {
   try {
@@ -709,7 +902,7 @@ const sendForgotPasswordOtp = async (req, res, next) => {
       return res.json({
         success: true,
         emailSent: false,
-        message: `⚠️ Email delivery failed (${emailRes.error || "Gmail credentials rejected"}). Your reset code is: ${otpData.otp} (or use dev code 123456).`,
+        message: `Reset code generated: ${otpData.otp} (or dev code 123456). Valid for 5 minutes.`,
         otp: otpData.otp,
         devOtp: "123456",
         email: normalizedEmail,
@@ -719,11 +912,8 @@ const sendForgotPasswordOtp = async (req, res, next) => {
     res.json({
       success: true,
       emailSent: true,
-      message: emailRes.simulated
-        ? `[Dev Mode] Password reset code: ${otpData.otp}.`
-        : `Password reset verification code sent to ${normalizedEmail}.`,
+      message: `Password reset verification code sent to ${normalizedEmail}. Valid for 5 minutes.`,
       email: normalizedEmail,
-      simulated: emailRes.simulated,
     });
   } catch (err) {
     next(err);
@@ -742,19 +932,26 @@ const verifyForgotPasswordOtp = async (req, res, next) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const isValid = await verifyOtp(normalizedEmail, otp, "password_reset");
+    const v = await verifyOtp(normalizedEmail, otp, "password_reset");
 
-    if (!isValid) {
+    if (!v.success) {
       return res.status(400).json({
         success: false,
-        message: "Invalid or expired reset code.",
+        message: v.message || "Invalid or expired reset code.",
       });
     }
 
+    const secret = process.env.JWT_SECRET || "edviko_jwt_secret_dev_key_2026_super_secure";
+    const resetToken = jwt.sign(
+      { email: normalizedEmail, purpose: "password_reset_confirmed" },
+      secret,
+      { expiresIn: "15m" }
+    );
+
     res.json({
       success: true,
+      resetToken,
       message: "Reset code verified. Please set your new password.",
-      email: normalizedEmail,
     });
   } catch (err) {
     next(err);
@@ -763,51 +960,37 @@ const verifyForgotPasswordOtp = async (req, res, next) => {
 
 const resetPasswordWithOtp = async (req, res, next) => {
   try {
-    const { email, otp, newPassword, confirmPassword } = req.body;
+    const { email, newPassword, resetToken } = req.body;
 
-    if (!email || !newPassword) {
+    if (!email || !newPassword || !resetToken) {
       return res.status(400).json({
         success: false,
-        message: "Email and new password are required.",
+        message: "Email, new password, and reset authorization token are required.",
       });
     }
 
     if (newPassword.length < 8) {
       return res.status(400).json({
         success: false,
-        message: "New password must be at least 8 characters.",
-      });
-    }
-
-    if (confirmPassword && newPassword !== confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "Passwords do not match.",
+        message: "Password must be at least 8 characters.",
       });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+    const secret = process.env.JWT_SECRET || "edviko_jwt_secret_dev_key_2026_super_secure";
 
-    let isValid = false;
-    if (otp) {
-      isValid = await verifyOtp(normalizedEmail, otp, "password_reset");
-    } else {
-      isValid = await isEmailVerified(normalizedEmail, "password_reset");
-    }
-
-    if (!isValid) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid or expired reset authorization. Please request a new code.",
-      });
+    try {
+      const decoded = jwt.verify(resetToken, secret);
+      if (decoded.email !== normalizedEmail || decoded.purpose !== "password_reset_confirmed") {
+        return res.status(403).json({ success: false, message: "Invalid reset token." });
+      }
+    } catch {
+      return res.status(403).json({ success: false, message: "Invalid or expired reset token." });
     }
 
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found.",
-      });
+      return res.status(404).json({ success: false, message: "User not found." });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -852,20 +1035,19 @@ const resendOtp = async (req, res, next) => {
     }
 
     if (!emailRes || !emailRes.success) {
-      return res.json({
-        success: true,
+      console.error(`[AUTH] ❌ SMTP resend failed for ${normalizedEmail}: ${emailRes?.error}`);
+      return res.status(502).json({
+        success: false,
         emailSent: false,
-        message: `⚠️ Email delivery failed (${emailRes?.error || "Gmail credentials rejected"}). Your verification code is: ${otpData.otp} (or use dev code 123456).`,
-        otp: otpData.otp,
-        devOtp: "123456",
-        email: normalizedEmail,
+        message: `Failed to deliver verification email to ${normalizedEmail}. SMTP error: ${emailRes?.error || "Mail server rejected request"}.`,
+        errorDetails: emailRes?.error,
       });
     }
 
     res.json({
       success: true,
       emailSent: true,
-      message: `A new verification code has been sent to ${normalizedEmail}.`,
+      message: `A new 6-digit verification code has been sent to ${normalizedEmail}. Valid for 5 minutes.`,
       email: normalizedEmail,
     });
   } catch (err) {
@@ -874,7 +1056,7 @@ const resendOtp = async (req, res, next) => {
 };
 
 // ==========================================
-// 9. GET CURRENT USER
+// 9. GET CURRENT USER (SESSION PERSISTENCE)
 // ==========================================
 const getMe = async (req, res, next) => {
   try {
@@ -937,7 +1119,7 @@ const listTeachers = async (req, res, next) => {
         email: t.userId.email,
         teacherCode: t.teacherCode,
         department: t.department,
-        subject: t.subject,
+        subject: t.subject || "General Academics",
         universityOrCollege: t.universityOrCollege,
       }));
 

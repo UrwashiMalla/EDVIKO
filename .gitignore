@@ -25,3 +25,14 @@ server/data/
 *.njsproj
 *.sln
 *.sw?
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+
+# Scratch & Backups
+scratch/

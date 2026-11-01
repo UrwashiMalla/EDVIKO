@@ -5,7 +5,7 @@ const fs = require("fs");
 let memoryServer = null;
 
 const connectDB = async () => {
-  const connUri = process.env.MONGODB_URI || "mongodb://localhost:27017/lerniq";
+  const connUri = process.env.MONGODB_URI || "mongodb://localhost:27017/edviko";
   try {
     // Fast check for local or configured MongoDB
     const conn = await mongoose.connect(connUri, { serverSelectionTimeoutMS: 2500 });
@@ -37,11 +37,11 @@ const connectDB = async () => {
         instance: {
           dbPath: dbDir,
           storageEngine: "wiredTiger",
-          dbName: "lerniq",
+          dbName: "edviko",
         },
       });
       const memoryUri = memoryServer.getUri();
-      const conn = await mongoose.connect(memoryUri, { dbName: "lerniq" });
+      const conn = await mongoose.connect(memoryUri, { dbName: "edviko" });
       console.log(`✅ Persistent Fallback MongoDB Connected at: ${memoryUri} (Database: lerniq)`);
       return conn;
     } catch (memErr) {
@@ -50,11 +50,11 @@ const connectDB = async () => {
         const { MongoMemoryServer } = require("mongodb-memory-server");
         memoryServer = await MongoMemoryServer.create({
           instance: {
-            dbName: "lerniq",
+            dbName: "edviko",
           },
         });
         const memoryUri = memoryServer.getUri();
-        const conn = await mongoose.connect(memoryUri, { dbName: "lerniq" });
+        const conn = await mongoose.connect(memoryUri, { dbName: "edviko" });
         console.log(`✅ Clean In-Memory Fallback MongoDB Connected at: ${memoryUri} (Database: lerniq)`);
         return conn;
       } catch (err2) {

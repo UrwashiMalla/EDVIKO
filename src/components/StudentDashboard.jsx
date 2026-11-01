@@ -6,7 +6,7 @@ import {
   useTransform,
 } from "framer-motion";
 import { useEffect, useState, useRef } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { studentApi } from "../services/api";
 import {
@@ -25,6 +25,17 @@ import "./StudentDashboard.css";
 function StudentDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Handle URL tabs from notifications (e.g. ?tab=messages or ?tab=announcements)
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "messages") {
+      setShowMessageTeacherModal(true);
+    } else if (tab === "announcements") {
+      setShowAnnouncementsModal(true);
+    }
+  }, [searchParams]);
 
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +48,11 @@ function StudentDashboard() {
   const [messageInput, setMessageInput] = useState("");
   const [toastNotice, setToastNotice] = useState("");
   const [activePopup, setActivePopup] = useState(null);
+  const [showJoinClassModal, setShowJoinClassModal] = useState(false);
+  const [joinCodeInput, setJoinCodeInput] = useState("");
+  const [classPreview, setClassPreview] = useState(null);
+  const [joinClassLoading, setJoinClassLoading] = useState(false);
+  const [joinClassMsg, setJoinClassMsg] = useState("");
   const messagesEndRef = useRef(null);
 
   const studentKey = user?.id || user?._id || user?.email || "default_student";
@@ -117,7 +133,7 @@ function StudentDashboard() {
     fetchDashboard();
     loadAllMessages();
 
-    const initialPopups = getStudentPopups(studentKey, user?.email);
+    const initialPopups = getStudentPopups(studentKey, user?.email).filter((p) => p.type !== "message");
     if (initialPopups.length > 0) {
       setActivePopup(initialPopups[0]);
     }
@@ -128,13 +144,14 @@ function StudentDashboard() {
         detail.type === "NOTE_UPLOADED" ||
         detail.type === "LECTURE_UPLOADED" ||
         detail.type === "QUIZ_UPLOADED" ||
-        detail.type === "NEW_STUDENT_POPUP" ||
-        detail.type === "DIRECT_MESSAGE"
+        detail.type === "NEW_STUDENT_POPUP"
       ) {
-        const updated = getStudentPopups(studentKey, user?.email);
+        const updated = getStudentPopups(studentKey, user?.email).filter((p) => p.type !== "message");
         if (updated.length > 0) {
           setActivePopup(updated[0]);
         }
+      }
+      if (detail.type === "DIRECT_MESSAGE") {
         loadAllMessages();
       }
     });
@@ -158,6 +175,57 @@ function StudentDashboard() {
     dismissStudentPopup(popupId);
     const remaining = getStudentPopups(studentKey, user?.email).filter((p) => p.id !== popupId);
     setActivePopup(remaining.length > 0 ? remaining[0] : null);
+  loadAllMessages();
+  };
+
+  const handlePreviewClass = async () => {
+    if (!joinCodeInput.trim()) return;
+    setJoinClassLoading(true);
+    setJoinClassMsg("");
+    try {
+      const res = await studentApi.validateClassroom({ code: joinCodeInput.trim() });
+      setClassPreview(res.classroom);
+    } catch (err) {
+      setClassPreview(null);
+      setJoinClassMsg(err.message || "Classroom code not found.");
+    } finally {
+      setJoinClassLoading(false);
+    }
+  };
+
+  const handleConfirmJoinClass = async () => {
+    if (!joinCodeInput.trim()) return;
+    setJoinClassLoading(true);
+    try {
+      const res = await studentApi.joinClassroom({ teacherCode: joinCodeInput.trim() });
+      setToastNotice(res.message || "Successfully joined classroom!");
+      setTimeout(() => setToastNotice(""), 3500);
+      setShowJoinClassModal(false);
+      setJoinCodeInput("");
+      setClassPreview(null);
+      const dash = await studentApi.getDashboard();
+      setDashboardData(dash);
+      loadAllMessages();
+    } catch (err) {
+      setJoinClassMsg(err.message || "Failed to join classroom.");
+    } finally {
+      setJoinClassLoading(false);
+    }
+  };
+
+  const handleSwitchClass = async (codeVal) => {
+    try {
+      const res = await studentApi.switchClassroom({ classroomCode: codeVal });
+      setToastNotice(res.message || `Switched to ${codeVal}`);
+      setTimeout(() => setToastNotice(""), 3500);
+      setShowJoinClassModal(false);
+      const dash = await studentApi.getDashboard();
+      setDashboardData(dash);
+      loadAllMessages();
+    } catch (err) {
+      setToastNotice(err.message || "Failed to switch classroom.");
+      setTimeout(() => setToastNotice(""), 3500);
+    }
   };
 
   const handleSendDirectMessage = async (e) => {
@@ -769,12 +837,16 @@ function StudentDashboard() {
               </small>
               <button
                 onClick={() => {
-                  const link = activePopup.link;
+                  const targetQuizLink = activePopup.quizId
+                    ? `/student/quizzes?quizId=${activePopup.quizId}&action=solve`
+                    : (activePopup.link || "/student/quizzes");
                   handleDismissPopup(activePopup.id);
-                  if (activePopup.type === "message") {
+                  if (activePopup.type === "quiz") {
+                    navigate(targetQuizLink);
+                  } else if (activePopup.type === "message") {
                     setShowMessageTeacherModal(true);
-                  } else if (link) {
-                    navigate(link);
+                  } else if (activePopup.link) {
+                    navigate(activePopup.link);
                   }
                 }}
                 style={{

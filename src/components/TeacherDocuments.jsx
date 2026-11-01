@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { extractTextFromFile } from "../utils/documentExtractor";
-import { quizApi } from "../services/api";
+import { quizApi, teacherApi } from "../services/api";
 import {
   getTeacherQuizzes,
   uploadQuiz,
@@ -107,10 +107,36 @@ function TeacherDocuments() {
     setQuizzes(getTeacherQuizzes());
   };
 
+  const fetchNotes = async () => {
+    try {
+      const res = await teacherApi.getNotes();
+      if (res.success && res.notes) {
+        setNotes(res.notes);
+        return;
+      }
+    } catch (err) {
+      console.warn("Could not fetch remote notes, falling back:", err.message);
+    }
+    setNotes(getUploadedNotes());
+  };
+
+  const fetchLectures = async () => {
+    try {
+      const res = await teacherApi.getLectures();
+      if (res.success && res.lectures) {
+        setLectures(res.lectures);
+        return;
+      }
+    } catch (err) {
+      console.warn("Could not fetch remote lectures, falling back:", err.message);
+    }
+    setLectures(getUploadedLectures());
+  };
+
   useEffect(() => {
     fetchQuizzes();
-    setNotes(getUploadedNotes());
-    setLectures(getUploadedLectures());
+    fetchNotes();
+    fetchLectures();
 
     const unsubscribe = onLerniqSync((detail) => {
       if (
@@ -119,6 +145,10 @@ function TeacherDocuments() {
         detail.type === "QUIZ_ATTEMPT_SUBMITTED"
       ) {
         fetchQuizzes();
+      } else if (detail.type && detail.type.startsWith("NOTE_")) {
+        fetchNotes();
+      } else if (detail.type && detail.type.startsWith("LECTURE_")) {
+        fetchLectures();
       }
     });
     return unsubscribe;
@@ -392,34 +422,31 @@ function TeacherDocuments() {
   };
 
   // ================= NOTES HANDLERS =================
-  const handlePublishNotes = (e) => {
+  const handlePublishNotes = async (e) => {
     e.preventDefault();
     if (!noteTitle.trim()) {
       showToast("Please enter a note title.");
       return;
     }
 
-    const updated = uploadNote({
+    const notePayload = {
       title: noteTitle.trim(),
       subject: noteSubject,
       module: noteModule.trim() || "Core Curriculum",
       description: noteDescription.trim() || "Handout notes prepared by course faculty.",
       content: noteContent.trim() || noteDescription.trim(),
       fileName: noteFileName ? noteFileName.replace(/^.*[\\\/]/, "") : "Lecture_Handout.pdf",
-    });
+    };
 
-    // Also persist as an official backend Document in MongoDB so it syncs to student documents & AI Tutor
-    const textToSave = noteContent.trim() || noteDescription.trim() || "Course study notes prepared by faculty.";
-    if (textToSave.length > 5) {
-      documentApi.create({
-        title: noteTitle.trim(),
-        extractedText: textToSave,
-        fileType: "pdf",
-        originalFileName: noteFileName ? noteFileName.replace(/^.*[\\\/]/, "") : "Faculty_Handout.pdf",
-      }).catch((err) => console.warn("Backend document sync note:", err.message));
+    try {
+      await teacherApi.createNote(notePayload);
+    } catch (err) {
+      console.warn("Remote note sync notice:", err.message);
     }
 
-    setNotes(updated);
+    uploadNote(notePayload);
+    await fetchNotes();
+
     setNoteTitle("");
     setNoteModule("");
     setNoteDescription("");
@@ -428,14 +455,20 @@ function TeacherDocuments() {
     showToast("📄 Notes uploaded and published to students!");
   };
 
-  const handleDeleteNote = (id) => {
-    const updated = deleteNote(id);
-    setNotes(updated);
+  const handleDeleteNote = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this study note?")) return;
+    try {
+      await teacherApi.deleteNote(id);
+    } catch (err) {
+      console.warn("Remote note delete notice:", err.message);
+    }
+    deleteNote(id);
+    await fetchNotes();
     showToast("Study notes deleted.");
   };
 
   // ================= LECTURE HANDLERS =================
-  const handlePublishLecture = (e) => {
+  const handlePublishLecture = async (e) => {
     e.preventDefault();
     if (!lectureTitle.trim()) {
       showToast("Please enter a lecture title.");
@@ -447,25 +480,39 @@ function TeacherDocuments() {
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
 
-    const updated = uploadLecture({
+    const lecturePayload = {
       title: lectureTitle.trim(),
       subject: lectureSubject,
       duration: lectureDuration,
       videoEmbedUrl: lectureUrl.trim(),
       description: lectureDescription.trim(),
       takeaways: takeawaysArray,
-    });
+    };
 
-    setLectures(updated);
+    try {
+      await teacherApi.createLecture(lecturePayload);
+    } catch (err) {
+      console.warn("Remote lecture sync notice:", err.message);
+    }
+
+    uploadLecture(lecturePayload);
+    await fetchLectures();
+
     setLectureTitle("");
     setLectureDescription("");
     setLectureTakeaways("");
     showToast("🎥 Lecture published to student portal!");
   };
 
-  const handleDeleteLecture = (id) => {
-    const updated = deleteLecture(id);
-    setLectures(updated);
+  const handleDeleteLecture = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this lecture?")) return;
+    try {
+      await teacherApi.deleteLecture(id);
+    } catch (err) {
+      console.warn("Remote lecture delete notice:", err.message);
+    }
+    deleteLecture(id);
+    await fetchLectures();
     showToast("Lecture removed.");
   };
 
@@ -1487,7 +1534,7 @@ function TeacherDocuments() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                   {notes.map((n) => (
                     <div
-                      key={n.id}
+                      key={n._id || n.id}
                       style={{
                         padding: "20px",
                         background: "#fbfaff",
@@ -1505,7 +1552,7 @@ function TeacherDocuments() {
                             {n.subject}
                           </span>
                           <span style={{ fontSize: "11px", color: "#64748b" }}>{n.module}</span>
-                          <span style={{ fontSize: "11px", color: "#94a3b8" }}>• {n.date}</span>
+                          <span style={{ fontSize: "11px", color: "#94a3b8" }}>• {n.createdAt ? new Date(n.createdAt).toLocaleDateString() : n.date}</span>
                         </div>
 
                         <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#1e293b", margin: "0 0 6px 0" }}>
@@ -1522,7 +1569,7 @@ function TeacherDocuments() {
                       </div>
 
                       <button
-                        onClick={() => handleDeleteNote(n.id)}
+                        onClick={() => handleDeleteNote(n._id || n.id)}
                         style={{
                           padding: "8px 14px",
                           background: "#fee2e2",
@@ -1680,7 +1727,7 @@ function TeacherDocuments() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                   {lectures.map((lec) => (
                     <div
-                      key={lec.id}
+                      key={lec._id || lec.id}
                       style={{
                         padding: "24px",
                         background: "#fbfaff",
@@ -1699,7 +1746,7 @@ function TeacherDocuments() {
                             {lec.subject}
                           </span>
                           <span style={{ fontSize: "12px", color: "#64748b" }}>⏱️ {lec.duration}</span>
-                          <span style={{ fontSize: "12px", color: "#94a3b8" }}>• {lec.date}</span>
+                          <span style={{ fontSize: "12px", color: "#94a3b8" }}>• {lec.createdAt ? new Date(lec.createdAt).toLocaleDateString() : lec.date}</span>
                         </div>
 
                         <h3 style={{ fontSize: "17px", fontWeight: "800", color: "#1e293b", margin: "0 0 8px 0" }}>
@@ -1750,7 +1797,7 @@ function TeacherDocuments() {
                         )}
 
                         <button
-                          onClick={() => handleDeleteLecture(lec.id)}
+                          onClick={() => handleDeleteLecture(lec._id || lec.id)}
                           style={{
                             padding: "8px 14px",
                             background: "#fee2e2",

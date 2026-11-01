@@ -368,7 +368,7 @@ const publishQuiz = async (req, res, next) => {
         type: "quiz",
         title: `🎯 New Quiz Published: ${quiz.title}`,
         message: `Your instructor published a new ${sanitizedQuestions.length}-question quiz: "${quiz.title}". Attempt it now to test your knowledge!`,
-        link: "/student/quizzes",
+        link: `/student/quizzes?quizId=${quiz._id}&action=solve`,
         quizId: quiz._id,
         isRead: false,
       }));
@@ -737,6 +737,27 @@ const submitQuizAttempt = async (req, res, next) => {
       passed,
       completedAt: new Date(),
     });
+
+    // Notify the quiz teacher in MongoDB
+    if (quiz.teacherId) {
+      try {
+        const studentName = req.user.name || req.user.username || "Student";
+        await Notification.create({
+          recipientId: quiz.teacherId,
+          senderId: req.user._id,
+          senderName: studentName,
+          classroomCode: quiz.classroomCode || "",
+          type: "quiz",
+          title: `📊 Quiz Completed: ${studentName}`,
+          message: `${studentName} scored ${score}/${totalQuestions} (${percentage}%) on "${quiz.title}".`,
+          link: "/teacher/quiz-results",
+          quizId: quiz._id,
+          isRead: false,
+        });
+      } catch (notifErr) {
+        console.warn("Quiz submission teacher notification warning:", notifErr.message);
+      }
+    }
 
     res.status(201).json({
       success: true,

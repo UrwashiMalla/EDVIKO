@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { authApi } from "../services/api";
 import studentImage from "../assets/student/student.png";
 import "./StudentSignup.css";
@@ -13,6 +13,7 @@ function StudentSignup() {
 
   // Step 1: Profile Info
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [teacherCode, setTeacherCode] = useState("");
   const [availableTeachers, setAvailableTeachers] = useState([]);
@@ -43,7 +44,6 @@ function StudentSignup() {
       .then((res) => {
         if (!ignore && res.teachers && res.teachers.length > 0) {
           setAvailableTeachers(res.teachers);
-          setTeacherCode((prev) => prev || res.teachers[0].teacherCode);
         }
       })
       .catch(() => {});
@@ -92,10 +92,16 @@ function StudentSignup() {
     setSuccessMessage("");
 
     const trimmedName = name.trim();
+    const trimmedUsername = username.trim().toLowerCase();
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedName) {
-      setErrorMessage("Please enter a username.");
+      setErrorMessage("Please enter your full name.");
+      return;
+    }
+
+    if (!trimmedUsername || trimmedUsername.length < 3) {
+      setErrorMessage("Please choose a username (at least 3 characters).");
       return;
     }
 
@@ -104,12 +110,20 @@ function StudentSignup() {
       return;
     }
 
+    const trimmedTeacherCode = teacherCode.trim().toUpperCase();
+    if (!trimmedTeacherCode) {
+      setErrorMessage("Classroom Code is required. Please obtain the classroom code from your teacher to register.");
+      return;
+    }
+
     setLoading(true);
 
     try {
       const res = await authApi.sendSignupOtp({
         name: trimmedName,
+        username: trimmedUsername,
         email: trimmedEmail,
+        teacherCode: trimmedTeacherCode,
       });
 
       setSuccessMessage(res.message || `Verification code sent to ${trimmedEmail}!`);
@@ -127,7 +141,6 @@ function StudentSignup() {
   // STEP 2: HANDLE OTP INPUT & VERIFY
   // ==========================================
   const handleOtpChange = (value, index) => {
-    // Only accept numeric input
     if (!/^\d*$/.test(value)) return;
 
     const newOtp = [...otp];
@@ -135,7 +148,6 @@ function StudentSignup() {
     setOtp(newOtp);
     setErrorMessage("");
 
-    // Auto-advance to next box
     if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
@@ -167,10 +179,11 @@ function StudentSignup() {
       await authApi.resendOtp({
         email: email.trim().toLowerCase(),
         name: name.trim(),
+        purpose: "student_verification",
       });
       setTimer(60);
       setOtp(["", "", "", "", "", ""]);
-      setSuccessMessage(`New verification code sent to ${email.trim()}!`);
+      setSuccessMessage(`New 5-minute verification code sent to ${email.trim()}!`);
       inputRefs.current[0]?.focus();
     } catch (err) {
       setErrorMessage(err.message || "Failed to resend code. Please try again.");
@@ -199,7 +212,7 @@ function StudentSignup() {
       });
 
       setVerificationToken(res.verificationToken || "");
-      setSuccessMessage("Email verified successfully! Now create your password.");
+      setSuccessMessage("Email verified successfully! Now create your secure password.");
       setStep(3);
     } catch (err) {
       setErrorMessage(err.message || "Invalid or expired verification code.");
@@ -241,23 +254,24 @@ function StudentSignup() {
     try {
       const res = await authApi.registerStudent({
         name: name.trim(),
+        username: username.trim().toLowerCase(),
         email: email.trim().toLowerCase(),
         password,
+        confirmPassword,
         teacherCode: teacherCode.trim(),
         verificationToken,
       });
 
       setSuccessMessage("🎉 Account created and verified successfully! Redirecting to login...");
 
-      // Smooth redirect to student login
       setTimeout(() => {
         navigate("/student/login", {
           state: {
             registeredEmail: email.trim().toLowerCase(),
-            registeredUsername: res.studentId || name.trim(),
+            registeredUsername: res.username || username.trim(),
           },
         });
-      }, 1400);
+      }, 1200);
     } catch (err) {
       setErrorMessage(err.message || "Failed to finalize account. Please try again.");
     } finally {
@@ -267,101 +281,118 @@ function StudentSignup() {
 
   return (
     <div className="signup-page">
-      {/* LEFT VISUAL */}
-      <motion.section
-        className="signup-visual"
-        initial={{ opacity: 0, x: -60 }}
+      {/* Decorative Blur Backgrounds */}
+      <div className="bg-shape shape-1" />
+      <div className="bg-shape shape-2" />
+
+      {/* =========================================================
+          LEFT HERO SECTION
+      ========================================================== */}
+      <motion.div
+        className="signup-hero"
+        initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.7 }}
+        transition={{ duration: 0.6 }}
       >
-        <div className="signup-logo">
-          <span className="signup-logo-icon">🎓</span>
+        <div className="signup-brand">
+          <span>🎓</span>
           <strong>EDVIKO</strong>
         </div>
 
-        <div className="signup-visual-content">
-          <div className="signup-badge">✨ PERSONALIZED LEARNING</div>
+        <div className="signup-hero-text">
+          <span className="badge">STUDENT PORTAL</span>
           <h1>
-            Your learning
-            <br />
-            journey starts
-            <br />
-            <span>here. 🚀</span>
+            Start Your Smart <br />
+            <span>Learning Journey 🚀</span>
           </h1>
           <p>
-            Create your profile and let EDVIKO personalize your learning experience with AI study tools.
+            Join EDVIKO today. Upload study materials, generate AI notes, practice smart MCQ quizzes, and connect with your educators.
           </p>
         </div>
 
-        <motion.img
-          src={studentImage}
-          alt="Student learning"
-          className="signup-student-image"
-          initial={{ opacity: 0, scale: 0.75, y: 50 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-        />
-      </motion.section>
+        {/* Feature Highlights */}
+        <div className="signup-features">
+          <div className="feature-item">
+            <span className="feature-icon">🤖</span>
+            <div>
+              <strong>AI Academic Tutor</strong>
+              <p>24/7 grounded concept explanations</p>
+            </div>
+          </div>
 
-      {/* RIGHT FORM SECTION */}
-      <motion.section
-        className="signup-form-section"
-        initial={{ opacity: 0, x: 70 }}
+          <div className="feature-item">
+            <span className="feature-icon">📊</span>
+            <div>
+              <strong>Instant Practice Quizzes</strong>
+              <p>Self-paced test evaluations</p>
+            </div>
+          </div>
+
+          <div className="feature-item">
+            <span className="feature-icon">💬</span>
+            <div>
+              <strong>Classroom Channel</strong>
+              <p>Private 1-on-1 messaging with your instructor</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="signup-illustration">
+          <img src={studentImage} alt="EDVIKO Student" />
+        </div>
+      </motion.div>
+
+      {/* =========================================================
+          RIGHT FORM CARD
+      ========================================================== */}
+      <motion.div
+        className="signup-card-wrapper"
+        initial={{ opacity: 0, x: 50 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.7 }}
+        transition={{ duration: 0.6, delay: 0.1 }}
       >
         <div className="signup-card">
-          {/* Back Navigation */}
-          {step === 1 && (
-            <button className="signup-back" onClick={() => navigate("/student/login")}>
-              ← Back to Login
-            </button>
-          )}
-          {step === 2 && (
-            <button className="signup-back" onClick={() => { setStep(1); setErrorMessage(""); }}>
-              ← Change Email / Username
-            </button>
-          )}
-          {step === 3 && (
-            <button className="signup-back" onClick={() => { setStep(2); setErrorMessage(""); }}>
-              ← Back to Verification
-            </button>
-          )}
+          {/* Back button */}
+          <button
+            type="button"
+            className="back-btn"
+            onClick={() => {
+              if (step > 1) {
+                setStep(step - 1);
+                setErrorMessage("");
+              } else {
+                navigate("/student/login");
+              }
+            }}
+          >
+            ← {step > 1 ? "Previous step" : "Back to login"}
+          </button>
 
-          {/* Progress Bar (3 Steps) */}
-          <div className="signup-progress">
-            <div className="progress-label">
-              <span>STEP {step} OF 3</span>
-              <span>{step === 1 ? "33%" : step === 2 ? "66%" : "100%"}</span>
+          {/* Header */}
+          <div className="signup-card-header">
+            <div className="step-indicator">
+              <span className={`step-dot ${step === 1 ? "active" : step > 1 ? "completed" : ""}`}>
+                {step > 1 ? "✓" : "1"}
+              </span>
+              <span className={`step-line ${step >= 2 ? "active" : ""}`} />
+              <span className={`step-dot ${step === 2 ? "active" : step > 2 ? "completed" : ""}`}>
+                {step > 2 ? "✓" : "2"}
+              </span>
+              <span className={`step-line ${step >= 3 ? "active" : ""}`} />
+              <span className={`step-dot ${step === 3 ? "active" : ""}`}>3</span>
             </div>
-            <div className="progress-track">
-              <div
-                className="progress-value"
-                style={{ width: step === 1 ? "33%" : step === 2 ? "66%" : "100%" }}
-              ></div>
-            </div>
+
+            <h2>
+              {step === 1 && "Create Student Account"}
+              {step === 2 && "Verify Email Address"}
+              {step === 3 && "Secure Your Password"}
+            </h2>
+            <p className="subtitle">
+              {step === 1 && "Enter your basic profile details to receive an OTP code"}
+              {step === 2 && "Enter the 6-digit verification code sent to your email (valid for 5 mins)"}
+              {step === 3 && "Choose a strong password to protect your student portal"}
+            </p>
           </div>
-
-          {/* Heading */}
-          <div className="signup-heading">
-            <div className="signup-welcome-icon">
-              {step === 1 ? "👋" : step === 2 ? "✉️" : "🔒"}
-            </div>
-            <div>
-              <p className="signup-small-title">
-                {step === 1 ? "WELCOME TO EDVIKO" : step === 2 ? "EMAIL VERIFICATION" : "ACCOUNT SECURITY"}
-              </p>
-              <h2>
-                {step === 1 ? "Create your profile" : step === 2 ? "Verify your email" : "Create password"}
-              </h2>
-            </div>
-          </div>
-
-          <p className="signup-description">
-            {step === 1 && "Enter your username and email address to get started with EDVIKO AI."}
-            {step === 2 && "We've sent a 6-digit verification code to your email address."}
-            {step === 3 && "Choose a strong password to complete registration and secure your profile."}
-          </p>
 
           {/* Success Banner */}
           {successMessage && (
@@ -371,9 +402,9 @@ function StudentSignup() {
                 padding: "10px 14px",
                 borderRadius: "10px",
                 background: "#f0fdf4",
-                color: "#166534",
+                color: "#15803d",
                 fontSize: "14px",
-                fontWeight: 600,
+                fontWeight: 500,
                 border: "1px solid #bbf7d0",
               }}
             >
@@ -400,24 +431,41 @@ function StudentSignup() {
           )}
 
           {/* =========================================================
-              STEP 1: USERNAME + EMAIL
+              STEP 1: FULL NAME, USERNAME, EMAIL, CLASSROOM CODE
           ========================================================== */}
           {step === 1 && (
             <form onSubmit={handleStep1Submit}>
+              {/* FULL NAME */}
+              <div className="modern-input-group">
+                <label>
+                  Full Name <span>*</span>
+                </label>
+                <div className="modern-input">
+                  <div className="field-icon">👤</div>
+                  <input
+                    type="text"
+                    placeholder="e.g. Aditya Pande"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+              </div>
+
               {/* USERNAME */}
               <div className="modern-input-group">
                 <label>
                   Username <span>*</span>
                 </label>
                 <div className="modern-input">
-                  <div className="field-icon">👤</div>
+                  <div className="field-icon">🆔</div>
                   <input
                     type="text"
-                    placeholder="Choose a unique username"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. aditya123"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     required
-                    autoFocus
                   />
                 </div>
               </div>
@@ -442,32 +490,25 @@ function StudentSignup() {
                 </small>
               </div>
 
-              {/* ASSIGNED FACULTY / MENTOR */}
-              {availableTeachers.length > 0 && (
-                <div className="modern-input-group">
-                  <label>Assigned Faculty / Mentor</label>
-                  <div className="modern-input">
-                    <div className="field-icon">👨‍🏫</div>
-                    <select
-                      value={teacherCode}
-                      onChange={(e) => setTeacherCode(e.target.value)}
-                      style={{
-                        width: "100%",
-                        border: "none",
-                        outline: "none",
-                        background: "transparent",
-                        fontSize: "14px",
-                      }}
-                    >
-                      {availableTeachers.map((t) => (
-                        <option key={t.teacherCode} value={t.teacherCode}>
-                          {t.name} ({t.teacherCode} - {t.department})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              {/* TEACHER CLASSROOM CODE (MANDATORY) */}
+              <div className="modern-input-group">
+                <label>
+                  Teacher Classroom Code <span>*</span>
+                </label>
+                <div className="modern-input">
+                  <div className="field-icon">🏫</div>
+                  <input
+                    type="text"
+                    placeholder="e.g. EDV-BAV5 (provided by your teacher)"
+                    value={teacherCode}
+                    onChange={(e) => setTeacherCode(e.target.value.toUpperCase())}
+                    required
+                  />
                 </div>
-              )}
+                <small style={{ color: "#64748b", fontSize: "11px", marginTop: "4px", display: "block" }}>
+                  Enter your teacher's code to match their classroom. Registration requires a valid teacher code.
+                </small>
+              </div>
 
               {/* CONTINUE BUTTON */}
               <motion.button
@@ -488,10 +529,13 @@ function StudentSignup() {
           ========================================================== */}
           {step === 2 && (
             <form onSubmit={handleStep2Submit}>
-              <div style={{ textAlign: "center", marginBottom: "8px" }}>
+              <div style={{ textAlign: "center", marginBottom: "14px" }}>
                 <span className="signup-email-badge">✉️ {email}</span>
+                <p style={{ fontSize: "12.5px", color: "#334155", margin: "6px 0 2px 0", fontWeight: 600 }}>
+                  Enrolling in Classroom: <strong style={{ color: "#7c3aed" }}>{teacherCode}</strong>
+                </p>
                 <p style={{ fontSize: "12px", color: "#64748b", margin: "4px 0 0 0" }}>
-                  Sent from: <strong style={{ color: "#7c3aed" }}>pandeaditya786@gmail.com</strong> (Check Inbox & Spam)
+                  💡 <strong>Tip:</strong> If not in your primary inbox, please check your <strong>Spam / Junk</strong> folder.
                 </p>
               </div>
 
@@ -568,30 +612,19 @@ function StudentSignup() {
                     type="button"
                     className="password-toggle"
                     onClick={() => setShowPassword(!showPassword)}
+                    tabIndex="-1"
                   >
-                    {showPassword ? "🙈" : "👁️"}
+                    {showPassword ? "👁️" : "👁️‍🗨️"}
                   </button>
                 </div>
 
+                {/* Password Strength Indicator */}
                 {password && (
-                  <div className="password-strength">
-                    <div className="strength-bars">
-                      {[1, 2, 3, 4].map((item) => (
-                        <span
-                          key={item}
-                          className={item <= passwordStrength ? "strength-active" : ""}
-                        ></span>
-                      ))}
-                    </div>
-                    <small>
-                      {passwordStrength <= 1
-                        ? "Weak password"
-                        : passwordStrength === 2
-                        ? "Fair password"
-                        : passwordStrength === 3
-                        ? "Good password"
-                        : "Strong password"}
-                    </small>
+                  <div className="password-strength-bar">
+                    <div
+                      className={`strength-fill strength-${passwordStrength}`}
+                      style={{ width: `${(passwordStrength / 4) * 100}%` }}
+                    />
                   </div>
                 )}
               </div>
@@ -602,7 +635,7 @@ function StudentSignup() {
                   Confirm Password <span>*</span>
                 </label>
                 <div className="modern-input">
-                  <div className="field-icon">🔐</div>
+                  <div className="field-icon">🔒</div>
                   <input
                     type={showConfirmPassword ? "text" : "password"}
                     placeholder="Re-enter your password"
@@ -614,43 +647,49 @@ function StudentSignup() {
                     type="button"
                     className="password-toggle"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    tabIndex="-1"
                   >
-                    {showConfirmPassword ? "🙈" : "👁️"}
+                    {showConfirmPassword ? "👁️" : "👁️‍🗨️"}
                   </button>
                 </div>
               </div>
 
-              {/* TERMS */}
-              <label className="terms-row">
+              {/* TERMS CHECKBOX */}
+              <label className="terms-checkbox">
                 <input
                   type="checkbox"
                   checked={agree}
                   onChange={(e) => setAgree(e.target.checked)}
+                  required
                 />
-                <span>I agree to the Terms of Service and Privacy Policy</span>
+                <span>
+                  I agree to the <Link to="/terms">Terms of Service</Link> and{" "}
+                  <Link to="/privacy">Privacy Policy</Link>
+                </span>
               </label>
 
-              {/* SUBMIT BUTTON */}
+              {/* FINALIZE BUTTON */}
               <motion.button
                 type="submit"
                 className="create-account-button"
-                disabled={loading}
+                disabled={loading || !agree}
                 whileHover={{ scale: 1.015 }}
                 whileTap={{ scale: 0.97 }}
               >
-                <span>{loading ? "Creating Account..." : "Complete Registration & Create Account"}</span>
-                <span className="button-arrow">→</span>
+                <span>{loading ? "Creating Account..." : "Complete Registration"}</span>
+                <span className="button-arrow">🚀</span>
               </motion.button>
             </form>
           )}
 
-          {/* Already have an account link */}
-          <div className="already-account">
-            <span>Already have an account?</span>
-            <button onClick={() => navigate("/student/login")}>Login</button>
+          {/* FOOTER */}
+          <div className="signup-footer">
+            <p>
+              Already registered? <Link to="/student/login">Log in to Student Portal</Link>
+            </p>
           </div>
         </div>
-      </motion.section>
+      </motion.div>
     </div>
   );
 }

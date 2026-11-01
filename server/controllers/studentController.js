@@ -4,6 +4,9 @@ const TeacherProfile = require("../models/TeacherProfile");
 const QuizAttempt = require("../models/QuizAttempt");
 const Message = require("../models/Message");
 const Notification = require("../models/Notification");
+const Classroom = require("../models/Classroom");
+const Lecture = require("../models/Lecture");
+const Note = require("../models/Note");
 
 /**
  * Get Student Dashboard Data (Statistics, Enrolled Teacher, Quizzes)
@@ -327,9 +330,23 @@ const sendDirectMessageToTeacher = async (req, res, next) => {
     const teacherUserId = studentProfile ? studentProfile.teacherId : null;
 
     if (!teacherUserId) {
+      const cls = await Classroom.findOne({ students: req.user._id });
+      if (cls) {
+        teacherUserId = cls.teacherId;
+      } else {
+        const tp = await TeacherProfile.findOne();
+        if (tp) teacherUserId = tp.userId;
+      }
+      if (studentProfile && teacherUserId) {
+        studentProfile.teacherId = teacherUserId;
+        await studentProfile.save();
+      }
+    }
+
+    if (!teacherUserId) {
       return res.status(400).json({
         success: false,
-        message: "No assigned teacher found. Please connect to a classroom first.",
+        message: "No instructor found in system. Please join a classroom first.",
       });
     }
 
@@ -372,6 +389,181 @@ const sendDirectMessageToTeacher = async (req, res, next) => {
   }
 };
 
+
+/**
+ * Validate classroom code before joining
+ */
+const validateClassroomCode = async (req, res, next) => {
+  try {
+    const { code } = req.body;
+    if (!code || !code.trim()) {
+      return res.status(400).json({ success: false, message: "Classroom code is required." });
+    }
+    const cleanCode = code.trim().toUpperCase();
+    const classroom = await Classroom.findOne({ code: cleanCode }).populate("teacherId", "name email");
+    const teacherProfile = await TeacherProfile.findOne({ teacherCode: cleanCode }).populate("userId", "name email");
+
+    if (!classroom && !teacherProfile) {
+      return res.status(404).json({ success: false, message: `Classroom with code "${cleanCode}" not found.` });
+    }
+
+    const teacherName = classroom?.teacherName || teacherProfile?.userId?.name || "Faculty Member";
+    const subject = classroom?.subject || teacherProfile?.subject || "General Academics";
+    const name = classroom?.name || `${subject} - ${teacherName}`;
+
+    res.json({
+      success: true,
+      classroom: {
+        code: cleanCode,
+        name,
+        subject,
+        teacherName,
+        teacherEmail: classroom?.teacherId?.email || teacherProfile?.userId?.email,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get all classrooms joined by student
+ */
+const getStudentClassrooms = async (req, res, next) => {
+  try {
+    const studentId = req.user._id;
+    const profile = await StudentProfile.findOne({ userId: studentId }).populate("teacherId", "name email");
+    const classrooms = await Classroom.find({ students: studentId }).populate("teacherId", "name email");
+    res.json({
+      success: true,
+      activeClassroomCode: profile?.classroomCode || "",
+      activeTeacher: profile?.teacherId || null,
+      classrooms,
+      classroomHistory: profile?.classroomHistory || [],
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Switch active classroom preserving all history
+ */
+const switchClassroom = async (req, res, next) => {
+  try {
+    const { classroomCode } = req.body;
+    if (!classroomCode || !classroomCode.trim()) {
+      return res.status(400).json({ success: false, message: "Classroom code is required." });
+    }
+    const cleanCode = classroomCode.trim().toUpperCase();
+    const classroom = await Classroom.findOne({ code: cleanCode }).populate("teacherId", "name email");
+    const teacherProf = await TeacherProfile.findOne({ teacherCode: cleanCode }).populate("userId", "name email");
+
+    if (!classroom && !teacherProf) {
+      return res.status(404).json({ success: false, message: "Classroom not found." });
+    }
+
+    const teacherUserId = classroom?.teacherId?._id || teacherProf?.userId?._id;
+    const teacherName = classroom?.teacherName || teacherProf?.userId?.name || "Faculty Member";
+
+    let profile = await StudentProfile.findOne({ userId: req.user._id });
+    if (!profile) {
+      profile = new StudentProfile({ userId: req.user._id });
+    }
+
+    profile.teacherId = teacherUserId;
+    profile.classroomCode = cleanCode;
+
+    const existsInHistory = (profile.classroomHistory || []).some(h => h.teacherCode === cleanCode);
+    if (!existsInHistory) {
+      profile.classroomHistory.push({
+        teacherId: teacherUserId,
+        teacherCode: cleanCode,
+        teacherName,
+        joinedAt: new Date(),
+      });
+    }
+
+    await profile.save();
+
+    res.json({
+      success: true,
+      message: `Switched active classroom to ${cleanCode} (${classroom?.name || teacherName}). All previous learning records preserved.`,
+      profile,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get lectures available to this student's classroom
+ */
+const getStudentLectures = async (req, res, next) => {
+  try {
+    const studentProfile = await StudentProfile.findOne({ userId: req.user._id });
+    let code = studentProfile?.classroomCode;
+
+    if (!code) {
+      const cls = await Classroom.findOne({ students: req.user._id });
+      if (cls) code = cls.code;
+    }
+
+    if (!code) {
+      return res.json({
+        success: true,
+        count: 0,
+        lectures: [],
+      });
+    }
+
+    const lectures = await Lecture.find({ classroomCode: code.toUpperCase() }).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      count: lectures.length,
+      classroomCode: code,
+      lectures,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get notes available to this student's classroom
+ */
+const getStudentNotes = async (req, res, next) => {
+  try {
+    const studentProfile = await StudentProfile.findOne({ userId: req.user._id });
+    let code = studentProfile?.classroomCode;
+
+    if (!code) {
+      const cls = await Classroom.findOne({ students: req.user._id });
+      if (cls) code = cls.code;
+    }
+
+    if (!code) {
+      return res.json({
+        success: true,
+        count: 0,
+        notes: [],
+      });
+    }
+
+    const notes = await Note.find({ classroomCode: code.toUpperCase() }).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      count: notes.length,
+      classroomCode: code,
+      notes,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getDashboardStats,
   updateProfile,
@@ -379,4 +571,9 @@ module.exports = {
   getClassroomBroadcasts,
   getDirectMessagesWithTeacher,
   sendDirectMessageToTeacher,
+  validateClassroomCode,
+  getStudentClassrooms,
+  switchClassroom,
+  getStudentLectures,
+  getStudentNotes,
 };

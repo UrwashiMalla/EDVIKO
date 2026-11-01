@@ -4,17 +4,39 @@ import { authApi } from "../services/api";
 
 const getStoredUser = () => {
   try {
-    const raw = localStorage.getItem("lerniq_user");
+    const raw = localStorage.getItem("edviko_user") || localStorage.getItem("lerniq_user");
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 };
 
+const getStoredToken = () => {
+  return localStorage.getItem("edviko_token") || localStorage.getItem("lerniq_token");
+};
+
+const setSession = (token, user) => {
+  if (token) {
+    localStorage.setItem("edviko_token", token);
+    localStorage.setItem("lerniq_token", token);
+  }
+  if (user) {
+    localStorage.setItem("edviko_user", JSON.stringify(user));
+    localStorage.setItem("lerniq_user", JSON.stringify(user));
+  }
+};
+
+const clearSession = () => {
+  localStorage.removeItem("edviko_token");
+  localStorage.removeItem("lerniq_token");
+  localStorage.removeItem("edviko_user");
+  localStorage.removeItem("lerniq_user");
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(getStoredUser);
   const [loading, setLoading] = useState(() => {
-    const token = localStorage.getItem("lerniq_token");
+    const token = getStoredToken();
     const cached = getStoredUser();
     return Boolean(token && !cached);
   });
@@ -23,11 +45,11 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let isMounted = true;
     const checkSession = async () => {
-      const token = localStorage.getItem("lerniq_token");
+      const token = getStoredToken();
       if (!token) {
         if (isMounted) {
           setUser(null);
-          localStorage.removeItem("lerniq_user");
+          clearSession();
           setLoading(false);
         }
         return;
@@ -38,17 +60,15 @@ export function AuthProvider({ children }) {
         if (isMounted) {
           if (res.success && res.user) {
             setUser(res.user);
-            localStorage.setItem("lerniq_user", JSON.stringify(res.user));
+            setSession(token, res.user);
           } else {
-            localStorage.removeItem("lerniq_token");
-            localStorage.removeItem("lerniq_user");
+            clearSession();
             setUser(null);
           }
         }
       } catch {
         if (isMounted && !getStoredUser()) {
-          localStorage.removeItem("lerniq_token");
-          localStorage.removeItem("lerniq_user");
+          clearSession();
           setUser(null);
         }
       } finally {
@@ -64,11 +84,8 @@ export function AuthProvider({ children }) {
 
   const loginStudent = async (username, password) => {
     const res = await authApi.loginStudent({ username, password });
-    if (res.token) {
-      localStorage.setItem("lerniq_token", res.token);
-    }
-    if (res.user) {
-      localStorage.setItem("lerniq_user", JSON.stringify(res.user));
+    if (res.token && res.user) {
+      setSession(res.token, res.user);
       setUser(res.user);
     }
     return res;
@@ -76,11 +93,8 @@ export function AuthProvider({ children }) {
 
   const loginTeacher = async (email, password) => {
     const res = await authApi.loginTeacher({ email, password });
-    if (res.token) {
-      localStorage.setItem("lerniq_token", res.token);
-    }
-    if (res.user) {
-      localStorage.setItem("lerniq_user", JSON.stringify(res.user));
+    if (res.token && res.user) {
+      setSession(res.token, res.user);
       setUser(res.user);
     }
     return res;
@@ -88,11 +102,8 @@ export function AuthProvider({ children }) {
 
   const registerStudent = async (formData) => {
     const res = await authApi.registerStudent(formData);
-    if (res.token) {
-      localStorage.setItem("lerniq_token", res.token);
-    }
-    if (res.user) {
-      localStorage.setItem("lerniq_user", JSON.stringify(res.user));
+    if (res.token && res.user) {
+      setSession(res.token, res.user);
       setUser(res.user);
     }
     return res;
@@ -100,11 +111,8 @@ export function AuthProvider({ children }) {
 
   const registerTeacher = async (formData) => {
     const res = await authApi.registerTeacher(formData);
-    if (res.token) {
-      localStorage.setItem("lerniq_token", res.token);
-    }
-    if (res.user) {
-      localStorage.setItem("lerniq_user", JSON.stringify(res.user));
+    if (res.token && res.user) {
+      setSession(res.token, res.user);
       setUser(res.user);
     }
     return res;
@@ -112,11 +120,8 @@ export function AuthProvider({ children }) {
 
   const verifyOtp = async (email, otp) => {
     const res = await authApi.verifyStudentOtp({ email, otp });
-    if (res.token) {
-      localStorage.setItem("lerniq_token", res.token);
-    }
-    if (res.user) {
-      localStorage.setItem("lerniq_user", JSON.stringify(res.user));
+    if (res.token && res.user) {
+      setSession(res.token, res.user);
       setUser(res.user);
     }
     return res;
@@ -128,8 +133,7 @@ export function AuthProvider({ children }) {
     } catch {
       // Ignore logout API failures
     } finally {
-      localStorage.removeItem("lerniq_token");
-      localStorage.removeItem("lerniq_user");
+      clearSession();
       setUser(null);
     }
   };
@@ -137,7 +141,7 @@ export function AuthProvider({ children }) {
   const updateUser = (updates) => {
     setUser((prev) => {
       const merged = { ...prev, ...updates };
-      localStorage.setItem("lerniq_user", JSON.stringify(merged));
+      setSession(null, merged);
       return merged;
     });
   };
@@ -147,7 +151,7 @@ export function AuthProvider({ children }) {
       const res = await authApi.getMe();
       if (res.success && res.user) {
         setUser(res.user);
-        localStorage.setItem("lerniq_user", JSON.stringify(res.user));
+        setSession(null, res.user);
       }
     } catch (err) {
       console.warn("User refresh error:", err.message);

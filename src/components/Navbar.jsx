@@ -60,34 +60,37 @@ function Navbar({ activeTab = "dashboard" }) {
     return user?.profile?.teacherCode || getTeacherClassCode(user?.id || user?._id || "default_teacher");
   });
 
+  // Notifications State (MongoDB backed for BOTH Teacher & Student)
+  const [userNotifications, setUserNotifications] = useState([]);
+  const [showStudentNotificationPopup, setShowStudentNotificationPopup] = useState(false);
+  const [quizPopup, setQuizPopup] = useState(null);
+
+  const studentNotifications = userNotifications;
+  const studentUnreadCount = userNotifications.filter((n) => !n.isRead).length;
+  const teacherUnreadCount = userNotifications.filter((n) => !n.isRead).length;
+
   // Classroom Entry Alerts (Teacher header popup)
   const [showClassEntryPopup, setShowClassEntryPopup] = useState(false);
   const [classroomEntries, setClassroomEntries] = useState(() => getClassroomEntries());
   const [entryToast, setEntryToast] = useState(null);
 
-  const unreadCount = classroomEntries.filter((e) => !e.read).length;
+  const entryUnreadCount = classroomEntries.filter((e) => !e.read).length;
+  const unreadCount = entryUnreadCount + teacherUnreadCount;
 
-  // Student Quiz & Course Notifications State (MongoDB backed + offline preservation)
-  const [studentNotifications, setStudentNotifications] = useState([]);
-  const [showStudentNotificationPopup, setShowStudentNotificationPopup] = useState(false);
-  const [quizPopup, setQuizPopup] = useState(null);
-
-  const studentUnreadCount = studentNotifications.filter((n) => !n.isRead).length;
-
-  const fetchStudentNotifications = async (showPopupOnLogin = false) => {
-    if (isTeacher || !user) return;
+  const fetchUserNotifications = async (showPopupOnLogin = false) => {
+    if (!user) return;
     try {
       const res = await notificationApi.getMyNotifications();
       const list = res.notifications || [];
-      setStudentNotifications(list);
+      setUserNotifications(list);
 
-      // Requirement E: Show popup notification when student logs in / visits if there are unread quiz alerts
-      if (showPopupOnLogin) {
+      // Show popup notification when student logs in / visits if there are unread alerts
+      if (showPopupOnLogin && !isTeacher) {
         const unread = list.filter((n) => !n.isRead);
         if (unread.length > 0) {
           const latest = unread[0];
           setQuizPopup({
-            id: latest._id,
+            id: latest.id || latest._id,
             title: latest.title,
             message: latest.message,
             quizId: latest.quizId,
@@ -96,60 +99,49 @@ function Navbar({ activeTab = "dashboard" }) {
         }
       }
     } catch (err) {
-      console.warn("Could not load student notifications:", err);
+      console.warn("Could not load notifications:", err);
     }
   };
 
   useEffect(() => {
-    if (isTeacher || !user) return;
-    fetchStudentNotifications(true);
+    if (!user) return;
+    fetchUserNotifications(true);
+
+    // 10-second polling interval for real-time background notification updates
+    const pollInterval = setInterval(() => {
+      fetchUserNotifications(false);
+    }, 10000);
+
+    // Refetch on window focus
+    const handleFocus = () => fetchUserNotifications(false);
+    window.addEventListener("focus", handleFocus);
 
     const unsubscribe = onLerniqSync((detail) => {
-      if (
-        detail.type === "QUIZ_UPLOADED" ||
-        detail.type === "QUIZ_PUBLISHED" ||
-        detail.type === "QUIZ_NOTIFICATION" ||
-        detail.type === "NEW_STUDENT_POPUP" ||
-        detail.type === "BROADCAST_CREATED" ||
-        detail.type === "DIRECT_MESSAGE"
-      ) {
-        fetchStudentNotifications(false);
-        const p = detail.payload || {};
+      fetchUserNotifications(false);
+      const p = detail.payload || {};
 
-        if (detail.type === "DIRECT_MESSAGE") {
-          const myId = String(user?.id || user?._id || "").toLowerCase();
-          const myEmail = String(user?.email || "").toLowerCase();
-          const targetKey = String(p.studentKey || "").toLowerCase();
-          const targetEmail = String(p.studentEmail || "").toLowerCase();
-
-          if (myId === targetKey || myEmail === targetKey || (targetEmail && myEmail === targetEmail)) {
-            setQuizPopup({
-              id: `dm-pop-${Date.now()}`,
-              title: `💬 New Message from ${p.message?.senderName || "Professor"}`,
-              message: p.message?.text || "You received a new direct message.",
-              link: "/student/dashboard",
-            });
-          }
-        } else if (detail.type === "BROADCAST_CREATED") {
+      // ONLY display quiz alert popup when a quiz is explicitly published or uploaded.
+      // Personal messaging or announcements never trigger a quiz alert.
+      if (!isTeacher) {
+        if (detail.type === "QUIZ_UPLOADED" || detail.type === "QUIZ_PUBLISHED") {
+          const qTitle = p.title || "Classroom Quiz";
+          const qId = p._id || p.id;
           setQuizPopup({
-            id: p._id || p.id || `ann-pop-${Date.now()}`,
-            title: `📢 Announcement: ${p.title || "Class Notice"}`,
-            message: p.content || p.message || "A new class announcement has been posted.",
-            link: "/student/dashboard",
-          });
-        } else if (p.title) {
-          setQuizPopup({
-            id: p._id || p.id || `quiz-pop-${Date.now()}`,
-            title: p.title.startsWith("New Quiz") ? p.title : `New Quiz: ${p.title}`,
-            message: p.message || `A new quiz "${p.title}" was published to your classroom. Test your knowledge now!`,
-            quizId: p._id || p.id,
-            link: "/student/quizzes",
+            id: qId || `quiz-pop-${Date.now()}`,
+            title: qTitle.startsWith("New Quiz") ? qTitle : `New Quiz: ${qTitle}`,
+            message: p.description || p.message || `A new quiz "${qTitle}" was published to your classroom. Test your knowledge now!`,
+            quizId: qId,
+            link: `/student/quizzes?quizId=${qId}&action=solve`,
           });
         }
       }
     });
 
-    return unsubscribe;
+    return () => {
+      clearInterval(pollInterval);
+      window.removeEventListener("focus", handleFocus);
+      unsubscribe();
+    };
   }, [user, isTeacher]);
 
   const handleToggleStudentNotifications = async () => {
@@ -158,7 +150,7 @@ function Navbar({ activeTab = "dashboard" }) {
     if (nextState && studentUnreadCount > 0) {
       try {
         await notificationApi.markAllRead();
-        setStudentNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+        setUserNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       } catch (err) {
         console.warn("Error marking notifications read:", err);
       }
@@ -310,8 +302,11 @@ function Navbar({ activeTab = "dashboard" }) {
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <button
               onClick={() => {
+                const targetLink = quizPopup.quizId
+                  ? `/student/quizzes?quizId=${quizPopup.quizId}&action=solve`
+                  : (quizPopup.link || "/student/quizzes");
                 setQuizPopup(null);
-                navigate(quizPopup.link || "/student/quizzes");
+                navigate(targetLink);
               }}
               style={{
                 background: "#ffffff",
@@ -441,6 +436,10 @@ function Navbar({ activeTab = "dashboard" }) {
                   setShowClassEntryPopup(nextState);
                   if (nextState) {
                     markClassroomEntriesAsRead();
+                    if (teacherUnreadCount > 0) {
+                      notificationApi.markAllRead().catch(() => {});
+                      setUserNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+                    }
                   }
                 }}
                 style={{
@@ -537,14 +536,60 @@ function Navbar({ activeTab = "dashboard" }) {
                     </button>
                   </div>
 
-                  <div style={{ maxHeight: "300px", overflowY: "auto", padding: "10px" }}>
-                    {classroomEntries.length === 0 ? (
+                  <div style={{ maxHeight: "320px", overflowY: "auto", padding: "10px" }}>
+                    {userNotifications.length > 0 && (
+                      <div style={{ marginBottom: "10px" }}>
+                        <div style={{ fontSize: "11px", fontWeight: "800", color: "#6d28d9", textTransform: "uppercase", padding: "2px 6px", marginBottom: "6px" }}>
+                          Classroom Events & Submissions
+                        </div>
+                        {userNotifications.map((n) => (
+                          <Link
+                            key={n.id || n._id}
+                            to={n.link || "/teacher/dashboard"}
+                            onClick={() => setShowClassEntryPopup(false)}
+                            style={{
+                              display: "block",
+                              textDecoration: "none",
+                              padding: "10px 12px",
+                              borderRadius: "10px",
+                              background: n.isRead ? "#ffffff" : "#f5f3ff",
+                              border: "1px solid",
+                              borderColor: n.isRead ? "#f1f5f9" : "#ddd6fe",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e293b" }}>
+                                {n.title}
+                              </div>
+                              {!n.isRead && (
+                                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444" }} />
+                              )}
+                            </div>
+                            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px", lineHeight: "1.3" }}>
+                              {n.message}
+                            </div>
+                            <div style={{ fontSize: "10px", color: "#8b5cf6", marginTop: "4px" }}>
+                              {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Recent"} • Click to view
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+
+                    {classroomEntries.length > 0 && (
+                      <div style={{ fontSize: "11px", fontWeight: "800", color: "#6d28d9", textTransform: "uppercase", padding: "2px 6px", marginBottom: "6px" }}>
+                        Student Entrance Logs
+                      </div>
+                    )}
+
+                    {userNotifications.length === 0 && classroomEntries.length === 0 ? (
                       <div style={{ padding: "24px 16px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
                         <span style={{ fontSize: "28px", display: "block", marginBottom: "6px" }}>👋</span>
-                        No recent student entries recorded yet.
+                        No recent alerts or student entries yet.
                         <br />
                         <small style={{ fontSize: "11px", color: "#cbd5e1" }}>
-                          When a student signs in or joins class, you will be notified here immediately.
+                          When a student completes a quiz, sends a message, or joins class, you will be notified here immediately.
                         </small>
                       </div>
                     ) : (
@@ -746,20 +791,34 @@ function Navbar({ activeTab = "dashboard" }) {
                             <button
                               onClick={() => {
                                 setShowStudentNotificationPopup(false);
-                                navigate(n.link || "/student/dashboard");
+                                let targetLink = n.link || "/student/dashboard";
+                                if (n.type === "quiz") {
+                                  const qId = n.quizId || n.metadata?.quizId;
+                                  targetLink = qId ? `/student/quizzes?quizId=${qId}&action=solve` : "/student/quizzes";
+                                } else if (n.type === "note") {
+                                  targetLink = "/student/lectures-notes?tab=notes";
+                                } else if (n.type === "lecture") {
+                                  targetLink = "/student/lectures-notes?tab=lectures";
+                                } else if (n.type === "message") {
+                                  targetLink = "/student/dashboard?tab=messages";
+                                } else if (n.type === "announcement") {
+                                  targetLink = "/student/dashboard?tab=announcements";
+                                }
+                                navigate(targetLink);
                               }}
                               style={{
                                 background: "#ede9fe",
                                 color: "#6d28d9",
                                 border: "none",
                                 borderRadius: "6px",
-                                padding: "4px 8px",
+                                padding: "5px 10px",
                                 fontSize: "11px",
                                 fontWeight: "700",
                                 cursor: "pointer",
+                                transition: "all 0.15s ease",
                               }}
                             >
-                              {n.type === "quiz" ? "Take Quiz →" : n.type === "note" ? "View Material →" : n.type === "message" ? "Reply →" : "View →"}
+                              {n.type === "quiz" ? "Solve Now →" : n.type === "note" ? "View Notes →" : n.type === "lecture" ? "View Lecture →" : n.type === "message" ? "Reply Message →" : "View Announcement →"}
                             </button>
                           </div>
                         </div>

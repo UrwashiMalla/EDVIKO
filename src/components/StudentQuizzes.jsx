@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/useAuth";
 import { quizApi } from "../services/api";
@@ -19,6 +19,9 @@ function StudentQuizzes() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"); // "all", "pending", "completed"
   const [search, setSearch] = useState("");
+  const [searchParams] = useSearchParams();
+  const urlQuizId = searchParams.get("quizId");
+  const autoSolveAction = searchParams.get("action") === "solve";
 
   // Active Quiz Solver State
   const [activeQuiz, setActiveQuiz] = useState(null);
@@ -55,6 +58,20 @@ function StudentQuizzes() {
     setQuizzes(local);
     setLoading(false);
   };
+
+  // Auto-launch quiz solver when opened from notification or "Solve Now"
+  useEffect(() => {
+    if (urlQuizId && quizzes.length > 0 && !activeQuiz) {
+      const match = quizzes.find((q) => String(q._id || q.id) === String(urlQuizId));
+      if (match) {
+        if (match.hasAttempted) {
+          handleViewResult(match);
+        } else {
+          handleStartQuiz(match);
+        }
+      }
+    }
+  }, [urlQuizId, quizzes, activeQuiz]);
 
   useEffect(() => {
     loadQuizzes();
@@ -147,7 +164,7 @@ function StudentQuizzes() {
           quizId: qId,
           studentId: user?.id || user?._id || "std_101",
           studentName: user?.name || "Student",
-          studentEmail: user?.email || "student@lerniq.edu",
+          studentEmail: user?.email || "student@edviko.com",
           score: res.result.score,
           totalQuestions: res.result.totalQuestions,
           answers: res.result.answers,
@@ -223,7 +240,7 @@ function StudentQuizzes() {
         quizId: activeQuiz.id || activeQuiz._id,
         studentId: user?.id || user?._id || "std_101",
         studentName: user?.name || "Student",
-        studentEmail: user?.email || "student@lerniq.edu",
+        studentEmail: user?.email || "student@edviko.com",
         score,
         totalQuestions,
         answers: evaluatedAnswers,

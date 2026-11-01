@@ -182,26 +182,7 @@ export const restoreAllRemovedStudents = () => {
 // ==========================================
 // TEACHER BROADCAST (GROUP MESSAGES)
 // ==========================================
-const DEFAULT_BROADCASTS = [
-  {
-    id: "ann-1",
-    title: "Midterm Exam Instructions & Topics",
-    content: "Please review Chapter 3 (Heuristic Search) and Chapter 4 (Game Theory) before Monday. The practice quiz has also been published on your dashboard.",
-    tag: "Announcement",
-    priority: "High",
-    teacherName: "Prof. Sarah Jenkins",
-    date: "Oct 28, 2026 • 10:30 AM",
-  },
-  {
-    id: "ann-2",
-    title: "New AI Architecture Notes Uploaded",
-    content: "Lecture notes and slide deck for Rational Agent PEAS Framework are now available in the Lectures & Notes section. Feel free to message me if you have any questions.",
-    tag: "Materials",
-    priority: "Normal",
-    teacherName: "Prof. Sarah Jenkins",
-    date: "Oct 26, 2026 • 02:15 PM",
-  },
-];
+const DEFAULT_BROADCASTS = [];
 
 export const getTeacherBroadcasts = () => {
   try {
@@ -330,21 +311,7 @@ export const sendDirectMessage = (studentKey = "", { senderRole, senderName, tex
     localStorage.setItem(`${STORAGE_KEYS.DIRECT_MESSAGES}_${String(studentEmail).toLowerCase()}`, JSON.stringify(updated));
   }
 
-  // If teacher sent it to student, create a popup notification strictly for that specific student!
-  if (senderRole === "teacher") {
-    addStudentPopup({
-      id: `dm-pop-${Date.now()}`,
-      targetStudentKey: cleanKey,
-      targetStudentEmail: studentEmail ? String(studentEmail).toLowerCase() : null,
-      type: type === "quiz_reminder" ? "reminder" : "message",
-      title: type === "quiz_reminder" ? `⏰ Quiz Reminder from ${senderName}` : `💬 Message from ${senderName}`,
-      message: text,
-      sender: senderName,
-      link: type === "quiz_reminder" ? "/student/quizzes" : "/student/dashboard",
-      linkText: type === "quiz_reminder" ? "Go to Quizzes" : "Reply Message",
-      timestamp: Date.now(),
-    });
-  }
+  // Note: Personal 1-on-1 direct messages do not create popups
 
   notifyLerniqSync("DIRECT_MESSAGE", { studentKey: cleanKey, studentEmail, message: newMsg });
   return updated;
@@ -380,41 +347,7 @@ export const sendQuizReminder = ({ studentId, studentName, studentEmail, quizTit
 // ==========================================
 // TEACHER NOTES
 // ==========================================
-const DEFAULT_NOTES = [
-  {
-    id: "tnote-1",
-    title: "AI Search Algorithms & Heuristics Handout",
-    subject: "Artificial Intelligence",
-    module: "Unit 1: Problem Formulation",
-    date: "Oct 24, 2026",
-    fileSize: "1.4 MB",
-    pages: "16 Pages",
-    description: "Comprehensive notes covering Uninformed (BFS, DFS, UCS) and Informed (Greedy, A*) search algorithms with heuristic admissibility proofs.",
-    content: "Heuristic Search: f(n) = g(n) + h(n). Admissibility guarantees optimal path on trees; consistency guarantees optimal path on graphs.",
-  },
-  {
-    id: "tnote-2",
-    title: "Neural Networks & Backpropagation Reference Sheet",
-    subject: "Deep Learning",
-    module: "Unit 3: Gradient Optimization",
-    date: "Oct 26, 2026",
-    fileSize: "2.1 MB",
-    pages: "12 Pages",
-    description: "Mathematical formulation of matrix calculus, chain rule decomposition, activation functions (ReLU, Sigmoid, GELU), and Adam optimizer equations.",
-    content: "Backpropagation relies on the multivariate chain rule to propagate error gradients backwards from the loss layer to input weights.",
-  },
-  {
-    id: "tnote-3",
-    title: "Database Indexing & B-Trees Quick Review",
-    subject: "Database Systems",
-    module: "Unit 2: Storage & Indexing",
-    date: "Oct 27, 2026",
-    fileSize: "950 KB",
-    pages: "8 Pages",
-    description: "Clustered vs non-clustered indexes, B+ tree leaf node pointer traversal, query execution plans, and index selectivity.",
-    content: "B+ Trees maintain balanced height with all records at leaf nodes, ensuring O(log N) disk block access.",
-  },
-];
+const DEFAULT_NOTES = [];
 
 export const getUploadedNotes = () => {
   try {
@@ -473,35 +406,7 @@ export const deleteNote = (id) => {
 // ==========================================
 // TEACHER LECTURES
 // ==========================================
-const DEFAULT_LECTURES = [
-  {
-    id: "tlec-1",
-    title: "Introduction to AI & Intelligent Agent Architectures",
-    subject: "Artificial Intelligence",
-    date: "Oct 24, 2026",
-    duration: "42 min",
-    videoEmbedUrl: "https://www.youtube.com/embed/JMUxmLyrhSk",
-    description: "Detailed analysis of agent architectures, PEAS (Performance, Environment, Actuators, Sensors), deterministic vs stochastic environments, and state-space search formulation.",
-    takeaways: [
-      "Rationality maximizes expected utility given precepts history.",
-      "PEAS description sets the baseline for agent specifications.",
-      "Reflex, model-based, goal-based, and utility agent comparisons.",
-    ],
-  },
-  {
-    id: "tlec-2",
-    title: "State-Space Search & Adversarial Alpha-Beta Pruning",
-    subject: "Artificial Intelligence",
-    date: "Oct 27, 2026",
-    duration: "48 min",
-    videoEmbedUrl: "https://www.youtube.com/embed/l-mYLq6e55U",
-    description: "Exploring Minimax decision rule in zero-sum game trees, depth cutoff heuristics, and Alpha-Beta bounding to prune suboptimal branches.",
-    takeaways: [
-      "Minimax gives optimal decisions against optimal opponents.",
-      "Alpha-Beta pruning achieves same decision as Minimax with up to 50% fewer node evaluations.",
-    ],
-  },
-];
+const DEFAULT_LECTURES = [];
 
 export const getUploadedLectures = () => {
   try {
@@ -568,76 +473,7 @@ export const deleteLecture = (id) => {
 // ==========================================
 // QUIZZES CONDUCTED & STUDENT ATTEMPTS
 // ==========================================
-const DEFAULT_QUIZZES = [
-  {
-    id: "quiz-101",
-    title: "AI Search Algorithms & Heuristics Quiz",
-    subject: "Artificial Intelligence",
-    questionCount: 4,
-    passingScore: 60,
-    timeLimit: 15,
-    difficulty: "Medium",
-    date: "Oct 25, 2026",
-    questions: [
-      {
-        question: "Which search algorithm is guaranteed to find the shallowest goal node in an unweighted tree?",
-        options: ["Depth-First Search (DFS)", "Breadth-First Search (BFS)", "Depth-Limited Search", "Greedy Best-First Search"],
-        answerIndex: 1,
-        explanation: "BFS explores level by level, ensuring the shallowest solution is found first.",
-      },
-      {
-        question: "For A* graph search to guarantee optimality, the heuristic function h(n) must be:",
-        options: ["Consistent (Monotone)", "Inadmissible", "Non-negative and strictly zero", "Always greater than true cost"],
-        answerIndex: 0,
-        explanation: "Consistency guarantees that optimal path to any visited node has already been found without reopening.",
-      },
-      {
-        question: "What is the worst-case space complexity of Depth-First Search with branching factor b and depth m?",
-        options: ["O(b * m)", "O(b^m)", "O(m^b)", "O(1)"],
-        answerIndex: 0,
-        explanation: "DFS only stores a single path from the root to a leaf along with unexpanded sibling nodes: O(b * m).",
-      },
-      {
-        question: "In Minimax decision trees, what does Alpha-Beta pruning achieve?",
-        options: ["Prunes branches that cannot influence the final decision", "Finds approximate suboptimal moves faster", "Eliminates all opponent leaf nodes", "Reduces tree depth by half unconditionally"],
-        answerIndex: 0,
-        explanation: "Alpha-beta pruning yields the exact same decision as standard Minimax while skipping irrelevant subtrees.",
-      },
-    ],
-    studentRoster: [],
-  },
-  {
-    id: "quiz-102",
-    title: "Neural Networks & Backprop Midterm Check",
-    subject: "Deep Learning",
-    questionCount: 3,
-    passingScore: 70,
-    timeLimit: 20,
-    difficulty: "Difficult",
-    date: "Oct 27, 2026",
-    questions: [
-      {
-        question: "What problem occurs during deep network training when gradients vanish through sigmoid activations?",
-        options: ["Exploding Weights", "Vanishing Gradient", "Overfitting to Noise", "Dead Neuron Effect"],
-        answerIndex: 1,
-        explanation: "Sigmoids have maximum derivative of 0.25, leading to exponentially decaying gradients in deep layers.",
-      },
-      {
-        question: "Which optimizer maintains running averages of both the gradients and the second moments of the gradients?",
-        options: ["Adam (Adaptive Moment Estimation)", "Vanilla Stochastic Gradient Descent", "Momentum SGD", "Adagrad"],
-        answerIndex: 0,
-        explanation: "Adam calculates adaptive learning rates from estimates of first and second moments of the gradients.",
-      },
-      {
-        question: "Which activation function is defined as f(x) = max(0, x)?",
-        options: ["ReLU", "Softmax", "GELU", "Tanh"],
-        answerIndex: 0,
-        explanation: "ReLU outputs x if positive, else zero, mitigating the vanishing gradient problem.",
-      },
-    ],
-    studentRoster: [],
-  },
-];
+const DEFAULT_QUIZZES = [];
 
 export const getTeacherQuizzes = () => {
   try {
@@ -711,7 +547,8 @@ export const uploadQuiz = ({
     title: `🎯 New Quiz Uploaded: ${title}`,
     message: `${actualQuestions.length} Questions (${difficulty}) • ${newQuiz.timeLimit ? `${newQuiz.timeLimit} mins` : "Untimed"}`,
     sender: "Prof. Sarah Jenkins",
-    link: "/student/quizzes",
+    link: `/student/quizzes?quizId=${newQuiz.id}&action=solve`,
+    quizId: newQuiz.id,
     linkText: "Solve Quiz Now",
     timestamp: Date.now(),
   });
@@ -763,7 +600,7 @@ export const recordStudentQuizAttempt = ({
       const attemptRecord = {
         studentId: studentId || "std_101",
         name: studentName || "Student",
-        email: studentEmail || "student@lerniq.edu",
+        email: studentEmail || "student@edviko.com",
         attempted: true,
         score,
         totalQuestions,
@@ -850,7 +687,7 @@ export const logClassroomEntry = ({ studentId, studentName, studentEmail }) => {
       id: `entry-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       studentId: studentId || "std_unknown",
       studentName: studentName || "Student",
-      studentEmail: studentEmail || "student@lerniq.edu",
+      studentEmail: studentEmail || "student@edviko.com",
       timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
       date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       read: false,

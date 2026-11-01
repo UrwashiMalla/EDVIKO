@@ -19,6 +19,7 @@ import LecturesNotes from "./components/LecturesNotes";
 import AIChatbot from "./components/AIChatbot";
 
 import TeacherLogin from "./components/TeacherLogin";
+import TeacherSignup from "./components/TeacherSignup";
 import TeacherDashboard from "./components/TeacherDashboard";
 import TeacherStudents from "./components/TeacherStudents";
 import TeacherStudentDetail from "./components/TeacherStudentDetail";
@@ -80,7 +81,7 @@ function App() {
             }
           />
 
-                    <Route
+          <Route
             path="/student/quizzes"
             element={
               <ProtectedRoute role="student">
@@ -146,6 +147,7 @@ function App() {
 
           {/* Teacher Auth */}
           <Route path="/teacher/login" element={<TeacherLogin />} />
+          <Route path="/teacher/signup" element={<TeacherSignup />} />
 
           {/* Teacher Protected Routes */}
           <Route
