@@ -593,3 +593,89 @@
   }
 
 }
+
+
+/* =========================================
+   OTP STEP STYLES IN SIGNUP
+========================================= */
+
+.signup-email-badge {
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  color: #6d28d9;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  display: inline-block;
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+
+.signup-otp-inputs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 24px 0 16px;
+}
+
+.signup-otp-inputs input {
+  width: 50px;
+  height: 56px;
+  border: 1.5px solid #e1dced;
+  border-radius: 12px;
+  background: #ffffff;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #30275a;
+  outline: none;
+  transition: 0.2s;
+  box-sizing: border-box;
+}
+
+.signup-otp-inputs input:focus {
+  border-color: #7045e9;
+  box-shadow: 0 0 0 4px rgba(112, 69, 233, 0.08);
+  transform: translateY(-2px);
+}
+
+.signup-otp-resend {
+  margin: 12px 0 20px;
+  text-align: center;
+}
+
+.signup-otp-resend p {
+  margin: 0;
+  color: #9691a4;
+  font-size: 12px;
+}
+
+.signup-otp-resend span {
+  display: inline-block;
+  margin-left: 6px;
+  color: #7045e9;
+  font-weight: 700;
+}
+
+.signup-otp-resend button {
+  border: none;
+  background: transparent;
+  color: #7045e9;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  margin-left: 6px;
+}
+
+@media (max-width: 480px) {
+  .signup-otp-inputs {
+    gap: 6px;
+  }
+  .signup-otp-inputs input {
+    width: 42px;
+    height: 48px;
+    font-size: 18px;
+  }
+}

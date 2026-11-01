@@ -1,15 +1,23 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { isStudentRemoved, logClassroomEntry } from "../services/frontendStorage";
 import studentImage from "../assets/student/student.png";
 
 function StudentLogin() {
-  const [username, setUsername] = useState("");
+  const location = useLocation();
+  const [username, setUsername] = useState(
+    location.state?.registeredUsername || location.state?.registeredEmail || ""
+  );
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successNotice, setSuccessNotice] = useState(
+    location.state?.registeredUsername
+      ? "🎉 Account verified & created successfully! Please enter your password to log in."
+      : ""
+  );
 
   const { loginStudent } = useAuth();
   const navigate = useNavigate();
@@ -17,19 +25,17 @@ function StudentLogin() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setErrorMessage("");
+    setSuccessNotice("");
 
     if (!username || !password) {
-      setErrorMessage("Please enter both Student ID and password.");
+      setErrorMessage("Please enter both Username/Email and password.");
       return;
     }
 
     setLoading(true);
 
     try {
-      let finalId = username.trim();
-      if (!finalId.includes('@')) {
-        finalId = finalId + '@lerniq.edu';
-      }
+      const finalId = username.trim();
 
       // Check if student was removed by teacher
       if (isStudentRemoved(finalId) || isStudentRemoved(username.trim())) {
@@ -110,6 +116,25 @@ function StudentLogin() {
           <p className="login-hello">Hello Student 👋</p>
           <h2>Student Login</h2>
           <p className="login-subtitle">Access your personalized learning dashboard</p>
+
+          {successNotice && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{
+                marginBottom: "16px",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                background: "#f0fdf4",
+                color: "#166534",
+                fontSize: "14px",
+                fontWeight: 600,
+                border: "1px solid #bbf7d0",
+              }}
+            >
+              {successNotice}
+            </motion.div>
+          )}
 
           {errorMessage && (
             <motion.div

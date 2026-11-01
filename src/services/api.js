@@ -45,6 +45,8 @@ export const apiRequest = async (endpoint, options = {}) => {
 
 // API Endpoints
 export const authApi = {
+  sendSignupOtp: (body) => apiRequest("/api/auth/send-signup-otp", { method: "POST", body: JSON.stringify(body) }),
+  verifySignupOtp: (body) => apiRequest("/api/auth/verify-signup-otp", { method: "POST", body: JSON.stringify(body) }),
   registerStudent: (body) => apiRequest("/api/auth/student/register", { method: "POST", body: JSON.stringify(body) }),
   loginStudent: (body) => apiRequest("/api/auth/student/login", { method: "POST", body: JSON.stringify(body) }),
   loginTeacher: (body) => apiRequest("/api/auth/teacher/login", { method: "POST", body: JSON.stringify(body) }),

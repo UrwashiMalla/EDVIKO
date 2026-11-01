@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const {
+  sendSignupOtp,
+  verifySignupOtp,
   registerStudent,
   verifyStudentOtp,
   resendOtp,
@@ -13,6 +15,8 @@ const {
 const { authenticate } = require("../middleware/authMiddleware");
 const { authLimiter } = require("../middleware/rateLimiter");
 
+router.post("/send-signup-otp", authLimiter, sendSignupOtp);
+router.post("/verify-signup-otp", authLimiter, verifySignupOtp);
 router.post("/student/register", authLimiter, registerStudent);
 router.post("/student/login", authLimiter, loginStudent);
 router.post("/teacher/login", authLimiter, loginTeacher);
