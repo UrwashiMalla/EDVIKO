@@ -7,6 +7,7 @@ import { useAuth } from "../context/useAuth";
 import { documentApi, aiApi } from "../services/api";
 import { isNonStudyQuery, getAcademicRefusalMessage } from "../utils/academicGuardrail";
 import { recognizeImageQuestion } from "../utils/imageOcrHelper";
+import { extractTextFromFile } from "../utils/documentExtractor";
 import Navbar from "./Navbar";
 import MarkdownRenderer from "./MarkdownRenderer";
 import "./AIChatbot.css";
@@ -131,27 +132,6 @@ Could you help me understand this problem?`);
     }
   };
 
-  // PDF Text Extraction
-  const extractPdfText = async (file) => {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    let completeText = "";
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
-      const page = await pdf.getPage(pageNumber);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items.map((item) => item.str).join(" ");
-      completeText += `\n\n--- Page ${pageNumber} ---\n\n` + pageText;
-    }
-    return completeText.trim();
-  };
-
-  // DOCX Text Extraction
-  const extractDocxText = async (file) => {
-    const arrayBuffer = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer });
-    return result.value.trim();
-  };
-
   // Handle direct PDF/Doc upload in chat
   const handleDocUpload = async (e) => {
     const file = e.target.files[0];
@@ -161,26 +141,17 @@ Could you help me understand this problem?`);
     setDocUploadStatus(`Reading and extracting "${file.name}"...`);
 
     try {
-      let extracted = "";
       const lowerName = file.name.toLowerCase();
-      if (lowerName.endsWith(".pdf") || file.type === "application/pdf") {
-        extracted = await extractPdfText(file);
-      } else if (lowerName.endsWith(".docx") || file.type.includes("wordprocessingml")) {
-        extracted = await extractDocxText(file);
-      } else {
-        extracted = await file.text();
-      }
-
-      if (!extracted || extracted.trim().length < 5) {
-        throw new Error("Could not extract readable text from this file.");
-      }
+      const extracted = await extractTextFromFile(file, (status) => {
+        setDocUploadStatus(status);
+      });
 
       setDocUploadStatus(`Saving "${file.name}" to study documents...`);
 
       const saveRes = await documentApi.create({
         title: file.name.replace(/\.[^/.]+$/, ""),
         originalFileName: file.name,
-        fileType: lowerName.endsWith(".docx") ? "docx" : (lowerName.endsWith(".pdf") ? "pdf" : "text"),
+        fileType: lowerName.endsWith(".docx") || lowerName.endsWith(".doc") ? "docx" : (lowerName.endsWith(".pdf") ? "pdf" : "text"),
         fileSize: file.size,
         extractedText: extracted,
       });
@@ -206,7 +177,7 @@ Could you help me understand this problem?`);
       ]);
     } catch (err) {
       console.error("Document upload failed:", err);
-      alert(`Document upload error: ${err.message || "Failed to parse document"}`);
+      alert(`Document upload error: ${err.message || "Failed to process document"}`);
     } finally {
       setIsUploadingDoc(false);
       setDocUploadStatus("");

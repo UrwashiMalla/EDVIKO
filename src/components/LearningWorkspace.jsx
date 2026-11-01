@@ -6,6 +6,7 @@ import mammoth from "mammoth/mammoth.browser";
 import { documentApi } from "../services/api";
 import Navbar from "./Navbar";
 import { recognizeImageQuestion } from "../utils/imageOcrHelper";
+import { extractTextFromFile } from "../utils/documentExtractor";
 
 import "./LearningWorkspace.css";
 
@@ -107,10 +108,8 @@ function LearningWorkspace({ onBack, onStartLearning }) {
       let text = "";
       const fileName = file.name.toLowerCase();
 
-      if (fileName.endsWith(".pdf")) {
-        text = await extractPdfText(file);
-      } else if (fileName.endsWith(".docx")) {
-        text = await extractDocxText(file);
+      if (fileName.endsWith(".pdf") || fileName.endsWith(".docx")) {
+        text = await extractTextFromFile(file);
       } else if (
         fileName.endsWith(".jpg") ||
         fileName.endsWith(".jpeg") ||
@@ -119,9 +118,7 @@ function LearningWorkspace({ onBack, onStartLearning }) {
       ) {
         text = await extractImageText(file);
       } else {
-        throw new Error(
-          "Please upload a PDF, DOCX, JPEG, or PNG file."
-        );
+        text = await extractTextFromFile(file);
       }
 
       if (!text || text.trim().length === 0) {

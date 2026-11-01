@@ -28,25 +28,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 
 const extractFileContent = async (file) => {
   if (!file) return "";
-  const name = file.name.toLowerCase();
-  if (name.endsWith(".pdf") || file.type === "application/pdf") {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    let completeText = "";
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
-      const page = await pdf.getPage(pageNumber);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items.map((item) => item.str).join(" ");
-      completeText += `\n\n--- Page ${pageNumber} ---\n\n` + pageText;
-    }
-    return completeText.trim();
-  } else if (name.endsWith(".docx") || file.type.includes("wordprocessingml")) {
-    const arrayBuffer = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer });
-    return result.value.trim();
-  } else {
-    return await file.text();
-  }
+  return await extractTextFromFile(file);
 };
 
 function TeacherDocuments() {
